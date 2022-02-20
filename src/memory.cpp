@@ -20,6 +20,7 @@ void process_memory_usage(double& vm_usage) {
 #include <fstream>
 #include <unistd.h>
 
+// https://stackoverflow.com/a/671389
 void process_memory_usage(double& vm_usage) {
 	vm_usage = 0.0;
 
@@ -47,7 +48,7 @@ void process_memory_usage(double& vm_usage) {
 
 		stat_stream.close();
 	}
-	
+
 	long page_size_kb = sysconf(_SC_PAGE_SIZE) / 1024; // in case x86-64 is configured to use 2MB pages
 	vm_usage = vsize;
 }

@@ -84,9 +84,7 @@ private:
 
 			double vm = 0.0;
 			process_memory_usage(vm);
-	
-			std::cout << vm << std::endl;
-
+			
 			document.AddMember(rapidjson::Value().SetString("memoryUsage", allocator), rapidjson::Value().SetDouble(vm / MEGABYTE), allocator);
 
 			rapidjson::StringBuffer buffer;
