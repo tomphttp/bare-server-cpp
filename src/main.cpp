@@ -159,7 +159,7 @@ int main(int argc, char* argv[]) {
 	desc.add_options ()
 		("help", "Print help")
 		("d,directory", po::value(&directory)->value_name("<string>")->default_value("/"), "Bare directory")
-		("h,host", po::value(&host)->value_name("<string>")->default_value("127.0.0.1"), "Listening host")
+		("h,host", po::value(&host)->value_name("<string>")->default_value("localhost"), "Listening host")
 		("p,port", po::value(&port)->value_name("<number>")->default_value("80"), "Listening port")
 	;
     
@@ -173,12 +173,14 @@ int main(int argc, char* argv[]) {
 	}
 
 	try {
-		auto const listen_address = net::ip::make_address(host);
 		unsigned short listen_port = static_cast<unsigned short>(std::atoi(port.c_str()));
 
 		net::io_context ioc{1};
 
-		tcp::acceptor acceptor{ioc, {listen_address, listen_port}};
+		tcp::resolver resolver{ioc};
+		auto const iter = resolver.resolve(host, port);
+		auto const endpoint = iter->endpoint();
+		tcp::acceptor acceptor{ioc, {endpoint.address(),endpoint.port()}};
 		tcp::socket socket{ioc};
 		http_server(acceptor, socket);
 
