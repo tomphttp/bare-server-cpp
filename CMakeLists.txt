@@ -12,6 +12,9 @@ file(GLOB_RECURSE sources ${PROJECT_SOURCE_DIR} ./src/*.cpp)
 
 find_package(Threads)
 find_package(OpenSSL REQUIRED)
+find_package(Boost COMPONENTS program_options REQUIRED)
+
+include_directories(${Boost_INCLUDE_DIRS})
 
 include_directories(${OPENSSL_INCLUDE_DIR})
 
@@ -21,3 +24,4 @@ message(${sources})
 add_executable(BareServer ${sources})
 
 target_link_libraries(BareServer ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(BareServer ${Boost_LIBRARIES})

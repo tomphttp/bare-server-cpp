@@ -3,6 +3,11 @@
 ## Dependencies
 
 - OpenSSL
+```sh
+sudo apt install libssl-dev
 ```
-sudo apt-get install libssl-dev
+
+- Boost
+```sh
+sudo apt install libboost-dev
 ```

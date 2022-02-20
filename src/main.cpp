@@ -1,6 +1,7 @@
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
 #include <boost/beast/version.hpp>
+#include <boost/program_options.hpp>
 #include <boost/asio.hpp>
 #include <chrono>
 #include <cstdlib>
@@ -12,6 +13,7 @@
 namespace beast = boost::beast;
 namespace http = beast::http;
 namespace net = boost::asio;
+namespace po = boost::program_options;
 using tcp = boost::asio::ip::tcp;
 
 namespace my_program_state {
@@ -148,23 +150,35 @@ void http_server(tcp::acceptor& acceptor, tcp::socket& socket) {
 }
 
 int main(int argc, char* argv[]) {
-	try {
-		// Check command line arguments.
-		if(argc != 3) {
-			std::cerr << "Usage: " << argv[0] << " <address> <port>\n";
-			std::cerr << "  For IPv4, try:\n";
-			std::cerr << "	receiver 0.0.0.0 80\n";
-			std::cerr << "  For IPv6, try:\n";
-			std::cerr << "	receiver 0::0 80\n";
-			return EXIT_FAILURE;
-		}
+	po::options_description desc ("Allowed options");
+    
+	std::string host;
+	std::string port;
+	std::string directory;
 
-		auto const address = net::ip::make_address(argv[1]);
-		unsigned short port = static_cast<unsigned short>(std::atoi(argv[2]));
+	desc.add_options ()
+		("help", "Print help")
+		("d,directory", po::value(&directory)->value_name("<string>")->default_value("/"), "Bare directory")
+		("h,host", po::value(&host)->value_name("<string>")->default_value("127.0.0.1"), "Listening host")
+		("p,port", po::value(&port)->value_name("<number>")->default_value("80"), "Listening port")
+	;
+    
+    po::variables_map vm;
+    po::store (po::command_line_parser (argc, argv).options (desc).run (), vm);
+    po::notify (vm);
+    
+	if (vm.count ("help")) {
+        std::cerr << desc << "\n";
+        return 1;
+	}
+
+	try {
+		auto const listen_address = net::ip::make_address(host);
+		unsigned short listen_port = static_cast<unsigned short>(std::atoi(port.c_str()));
 
 		net::io_context ioc{1};
 
-		tcp::acceptor acceptor{ioc, {address, port}};
+		tcp::acceptor acceptor{ioc, {listen_address, listen_port}};
 		tcp::socket socket{ioc};
 		http_server(acceptor, socket);
 
