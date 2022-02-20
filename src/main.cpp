@@ -25,20 +25,25 @@ public:
 	Serving(tcp::socket s) : socket(std::move(s)) {}
 	void process(){
 		read();
+		init_deadline();
 	}
 private:
 	tcp::socket socket;
 	beast::flat_buffer buffer{8192};
 	http::request<http::dynamic_body> request;
 	http::response<http::dynamic_body> response;
-	// net::steady_timer deadline{ socket.get_executor(), std::chrono::seconds(60) };
+	net::steady_timer deadline{ socket.get_executor(), std::chrono::seconds(60) };
 	// The timer for putting a deadline on connection processing.
-	/*deadline.async_wait([&socket](beast::error_code ec) {
-		if(!ec) {
-			// Close socket to cancel any outstanding operation.
-			// socket.close(ec);
-		}
-	});*/
+	void init_deadline(){
+		std::shared_ptr<Serving> serving = shared_from_this();
+
+		deadline.async_wait([serving](beast::error_code ec) {
+			if(!ec) {
+				// Close socket to cancel any outstanding operation.
+				serving->socket.close(ec);
+			}
+		});
+	}
 	void read(){ // headers and body
 		std::shared_ptr<Serving> serving = shared_from_this();
 	
@@ -52,9 +57,59 @@ private:
 			}
 		});
 	}
-	void respond(){
-		std::cout << request.target().to_string() << std::endl;
+	std::string instance_information(){
+		rapidjson::Document document;
+		
+		document.SetObject();
+		
+		rapidjson::Document::AllocatorType& allocator = document.GetAllocator();
 
+		rapidjson::Value versions;
+
+		versions.SetArray();
+
+		versions.PushBack(rapidjson::Value().SetString("v1", allocator), allocator);
+
+		document.AddMember(rapidjson::Value().SetString("versions", allocator), versions, allocator);
+
+		document.AddMember(rapidjson::Value().SetString("language", allocator), rapidjson::Value().SetString("C++", allocator), allocator);
+
+		double vm = 0.0;
+		process_memory_usage(vm);
+
+		document.AddMember(rapidjson::Value().SetString("memoryUsage", allocator), rapidjson::Value().SetDouble(vm / MEGABYTE), allocator);
+
+		rapidjson::StringBuffer buffer;
+		rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+
+		document.Accept(writer);
+
+		return buffer.GetString();
+	}
+	void respond(){
+		response.version(request.version());
+		response.keep_alive(false);
+
+		std::string target = request.target().to_string();
+		
+		if(target == "/v1/"){
+			
+		}
+		else if(target == "/v1/ws-meta"){
+
+		}
+		else if(target == "/"){
+			std::string body = instance_information();
+
+			response.set("content-type", "application/json");
+			beast::ostream(response.body()) << body;
+			response.content_length(response.body().size());
+
+			write();
+
+			return;
+		}
+		
 		response.result(http::status::not_found);
 		response.set(http::field::content_type, "text/plain");
 		beast::ostream(response.body()) << "File not found";
