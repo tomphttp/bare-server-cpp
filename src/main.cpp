@@ -3,8 +3,8 @@
 #include <boost/beast/version.hpp>
 #include <boost/program_options.hpp>
 #include <boost/asio.hpp>
-#include <chrono>
-#include <cstdlib>
+#include <rapidjson/document.h>
+#include <rapidjson/writer.h>
 #include <ctime>
 #include <iostream>
 #include <memory>
@@ -16,21 +16,9 @@ namespace net = boost::asio;
 namespace po = boost::program_options;
 using tcp = boost::asio::ip::tcp;
 
-namespace my_program_state {
-	std::size_t
-	request_count() {
-		static std::size_t count = 0;
-		return ++count;
-	}
-	std::time_t now() {
-		return std::time(0);
-	}
-}
-
 class http_connection : public std::enable_shared_from_this<http_connection> {
 public:
-	http_connection(tcp::socket socket) : socket_(std::move(socket)) {
-	}
+	http_connection(tcp::socket socket) : socket_(std::move(socket)) {}
 	// Initiate the asynchronous operations associated with the connection.
 	void start() {
 		read_request();
@@ -69,29 +57,50 @@ private:
 		response_.version(request_.version());
 		response_.keep_alive(false);
 
-		switch(request_.method()) {
-		case http::verb::get:
-			response_.result(http::status::ok);
-			response_.set(http::field::server, "Beast");
-			create_response();
-			break;
-		default:
-			// We return responses indicating an error if
-			// we do not recognize the request method.
-			response_.result(http::status::bad_request);
-			response_.set(http::field::content_type, "text/plain");
-			beast::ostream(response_.body()) << "Invalid request-method '" << std::string(request_.method_string()) << "'";
-			break;
+		const std::string target = request_.target().to_string();
+		
+		if(target == "/v1/"){
+			
 		}
+		else if(target == "/v1/ws-meta"){
 
-		write_response();
+		}
+		else if(target == "/"){
+			rapidjson::Document document;
+			document.SetObject();
+			
+			rapidjson::Document::AllocatorType& allocator = document.GetAllocator();
+
+			rapidjson::Value versions;
+			versions.SetArray();
+			versions.PushBack(rapidjson::Value().SetString("v1", allocator), allocator);
+			document.AddMember(rapidjson::Value().SetString("versions", allocator), versions, allocator);
+
+			rapidjson::StringBuffer buffer;
+			rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+
+			document.Accept(writer);
+
+			std::string serialized = buffer.GetString();
+
+			response_.set("content-type", "application/json");
+			beast::ostream(response_.body()) << serialized;
+
+			write_response();
+
+			return;
+		}
+		
+		response_.result(http::status::not_found);
+		response_.set(http::field::content_type, "text/plain");
+		beast::ostream(response_.body()) << "File not found\r\n";
 	}
 
 	// Construct a response message based on the program state.
 	void create_response() {
 		if(request_.target() == "/count") {
 			response_.set(http::field::content_type, "text/html");
-			beast::ostream(response_.body()) << "<html>\n" <<  "<head><title>Request count</title></head>\n" <<  "<body>\n" <<  "<h1>Request count</h1>\n" <<  "<p>There have been " <<  my_program_state::request_count() <<  " requests so far.</p>\n" <<  "</body>\n" <<  "</html>\n";
+			beast::ostream(response_.body()) << "<html>\n" <<  "<head><title>Request count</title></head>\n" <<  "<body>\n" <<  "<h1>Request count</h1>\n" <<  "<p>There have been undefined requests so far.</p>\n" <<  "</body>\n" <<  "</html>\n";
 		}
 		else if(request_.target() == "/time") {
 			response_.set(http::field::content_type, "text/html");
@@ -100,8 +109,7 @@ private:
 				<<  "<head><title>Current time</title></head>\n"
 				<<  "<body>\n"
 				<<  "<h1>Current time</h1>\n"
-				<<  "<p>The current time is "
-				<<  my_program_state::now()
+				<<  "<p>The current time is NaN"
 				<<  " seconds since the epoch.</p>\n"
 				<<  "</body>\n"
 				<<  "</html>\n";

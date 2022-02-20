@@ -11,3 +11,8 @@ sudo apt install libssl-dev
 ```sh
 sudo apt install libboost-dev
 ```
+
+- RapidJSON
+```sh
+sudo apt install rapidjson-dev
+```
