@@ -1,0 +1,2 @@
+#define BareServer_VERSION_MAJOR @BareServer_VERSION_MAJOR@
+#define BareServer_VERSION_MINOR @BareServer_VERSION_MINOR@
