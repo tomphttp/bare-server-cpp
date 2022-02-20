@@ -9,12 +9,16 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include "./memory.h"
 
 namespace beast = boost::beast;
 namespace http = beast::http;
 namespace net = boost::asio;
 namespace po = boost::program_options;
 using tcp = boost::asio::ip::tcp;
+
+// 1024 squared
+constexpr unsigned long long MEGABYTE = 1048576;
 
 class http_connection : public std::enable_shared_from_this<http_connection> {
 public:
@@ -76,6 +80,15 @@ private:
 			versions.PushBack(rapidjson::Value().SetString("v1", allocator), allocator);
 			document.AddMember(rapidjson::Value().SetString("versions", allocator), versions, allocator);
 
+			document.AddMember(rapidjson::Value().SetString("language", allocator), rapidjson::Value().SetString("C++", allocator), allocator);
+
+			double vm = 0.0;
+			process_memory_usage(vm);
+	
+			std::cout << vm << std::endl;
+
+			document.AddMember(rapidjson::Value().SetString("memoryUsage", allocator), rapidjson::Value().SetDouble(vm / MEGABYTE), allocator);
+
 			rapidjson::StringBuffer buffer;
 			rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
 
@@ -93,34 +106,9 @@ private:
 		
 		response_.result(http::status::not_found);
 		response_.set(http::field::content_type, "text/plain");
-		beast::ostream(response_.body()) << "File not found\r\n";
+		beast::ostream(response_.body()) << "File not found";
+		write_response();
 	}
-
-	// Construct a response message based on the program state.
-	void create_response() {
-		if(request_.target() == "/count") {
-			response_.set(http::field::content_type, "text/html");
-			beast::ostream(response_.body()) << "<html>\n" <<  "<head><title>Request count</title></head>\n" <<  "<body>\n" <<  "<h1>Request count</h1>\n" <<  "<p>There have been undefined requests so far.</p>\n" <<  "</body>\n" <<  "</html>\n";
-		}
-		else if(request_.target() == "/time") {
-			response_.set(http::field::content_type, "text/html");
-			beast::ostream(response_.body())
-				<<  "<html>\n"
-				<<  "<head><title>Current time</title></head>\n"
-				<<  "<body>\n"
-				<<  "<h1>Current time</h1>\n"
-				<<  "<p>The current time is NaN"
-				<<  " seconds since the epoch.</p>\n"
-				<<  "</body>\n"
-				<<  "</html>\n";
-		}
-		else {
-			response_.result(http::status::not_found);
-			response_.set(http::field::content_type, "text/plain");
-			beast::ostream(response_.body()) << "File not found\r\n";
-		}
-	}
-
 	// Asynchronously transmit the response message.
 	void write_response() {
 		auto self = shared_from_this();
