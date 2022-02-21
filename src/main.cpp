@@ -99,9 +99,7 @@ void Server::listen(std::string host, std::string port){
 	
 	http_server(acceptor, socket);
 
-	while(true){
-
-	}
+	io.wait();
 }
 
 void Server::http_server(tcp::acceptor& acceptor, tcp::socket& socket) {
