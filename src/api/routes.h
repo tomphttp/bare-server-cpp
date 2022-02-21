@@ -2,6 +2,6 @@
 #include <string>
 #include "../Serving.h"
 
-using Route = void(*)(std::shared_ptr<Serving>);
+using Route = void(std::shared_ptr<Serving>);
 
-extern std::map<std::string, Route> routes;
+extern const std::map<std::string, Route*> routes;

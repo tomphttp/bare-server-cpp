@@ -4,6 +4,7 @@
 #include <string>
 #include "./Serving.h"
 #include "./api/routes.h"
+#include <cassert>
 
 namespace beast = boost::beast;
 namespace http = beast::http;
@@ -66,10 +67,12 @@ void Serving::respond(){
 		beast::ostream(response.body()) << "File not found";
 		response.content_length(response.body().size());
 
-		write();
+		return void(write());
 	}
 
-	Route route = routes.at(target);
+	Route* route = routes.at(target);
+	
+	assert(route != NULL);
 	
 	route(shared_from_this());
 }
