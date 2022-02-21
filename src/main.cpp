@@ -83,23 +83,22 @@ void Serving::respond(){
 	route(shared_from_this());
 }
 
-Server::Server(std::string directory_)
+Server::Server(std::string directory_, size_t threads)
 	: directory(directory_)
+	, iop(threads)
 {}
 
 void Server::listen(std::string host, std::string port){
-	boost::asio::thread_pool io(1);
-	
-	tcp::resolver resolver(io.get_executor());
+	tcp::resolver resolver(iop.get_executor());
 	
 	auto const resolved = resolver.resolve(host, port);
 
-	tcp::acceptor acceptor(io.get_executor(), {resolved->endpoint().address(),resolved->endpoint().port()});
-	tcp::socket socket(io.get_executor());
+	tcp::acceptor acceptor(iop.get_executor(), {resolved->endpoint().address(),resolved->endpoint().port()});
+	tcp::socket socket(iop.get_executor());
 	
 	http_server(acceptor, socket);
 
-	io.wait();
+	iop.wait();
 }
 
 void Server::http_server(tcp::acceptor& acceptor, tcp::socket& socket) {
@@ -118,12 +117,14 @@ int main(int argc, char* argv[]) {
 	std::string host;
 	std::string port;
 	std::string directory;
+	size_t threads = 0;
 
 	desc.add_options ()
 		("help", "Print help")
 		("d,directory", po::value(&directory)->value_name("<string>")->default_value("/"), "Bare directory")
 		("h,host", po::value(&host)->value_name("<string>")->default_value("localhost"), "Listening host")
 		("p,port", po::value(&port)->value_name("<number>")->default_value("80"), "Listening port")
+		("t,threads", po::value(&threads)->value_name("<number>")->default_value(4), "Amount of IO threads")
 	;
     
     po::variables_map vm;
@@ -136,7 +137,7 @@ int main(int argc, char* argv[]) {
 	}
 
 	try {
-		std::shared_ptr<Server> server = std::make_shared<Server>(directory);
+		std::shared_ptr<Server> server = std::make_shared<Server>(directory, threads);
 		server->listen(host, port);
 	}
 	catch(std::exception const& e) {
