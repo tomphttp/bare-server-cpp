@@ -70,6 +70,20 @@ private:
 			std::cout << it->name() << " : " << it->value() << std::endl;
 		}
 
+
+		std::cout << "create message" << std::endl;		
+
+		http::message<false, http::string_body, http::fields> message(http::status::ok, 11);
+
+
+		// message.set("x-bare-headers", "ok");
+
+		http::response_serializer<http::string_body> serializer(message);
+	
+		http::async_write(serving->socket, serializer.get(), beast::bind_front_handler(&Session::on_client_write, shared_from_this()));
+	}
+	void on_client_write(beast::error_code ec, size_t bytes_transferred){
+		std::cout << "Wrote to cli" << std::endl;
 		http::async_read_some(stream, buffer, remote_parser, beast::bind_front_handler(&Session::on_body, shared_from_this()));
 	}
 	void on_body(beast::error_code ec, size_t bytes_transferred){
