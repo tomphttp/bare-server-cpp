@@ -58,14 +58,6 @@ private:
 		
 		
 		http::async_read_header(stream, buffer, remote_parser, beast::bind_front_handler(&Session::on_headers, shared_from_this()));
-
-		// beast::flat_buffer headers;
-		// size_t read = stream.read_some(headers);
-		// , [&](beast::error_code ec, std::size_t bytes_transferred){
-		// std::cout << "read " << read << ", " << std::string((char*)headers.data().data(), read) << std::endl;
-
-		// Receive the HTTP response
-		// http::async_read(stream, buffer, response, beast::bind_front_handler(&Session::on_read, shared_from_this()));
 	}
 	void on_headers(beast::error_code ec, size_t bytes_transferred){
 		if(ec) {
