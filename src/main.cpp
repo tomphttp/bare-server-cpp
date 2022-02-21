@@ -48,7 +48,7 @@ void Serving::write(){
 
 	http::async_write(socket, response, [serving](beast::error_code ec, std::size_t) {
 		serving->socket.shutdown(tcp::socket::shutdown_send, ec);
-		// deadline.cancel();
+		serving->deadline.cancel();
 	});
 }
 
