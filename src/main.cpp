@@ -88,14 +88,20 @@ Server::Server(std::string directory_)
 {}
 
 void Server::listen(std::string host, std::string port){
-	net::io_context ioc{1};
-	tcp::resolver resolver{ioc};
-	auto const iter = resolver.resolve(host, port);
-	auto const endpoint = iter->endpoint();
-	tcp::acceptor acceptor{ioc, {endpoint.address(),endpoint.port()}};
-	tcp::socket socket{ioc};
+	boost::asio::thread_pool io(1);
+	
+	tcp::resolver resolver(io.get_executor());
+	
+	auto const resolved = resolver.resolve(host, port);
+
+	tcp::acceptor acceptor(io.get_executor(), {resolved->endpoint().address(),resolved->endpoint().port()});
+	tcp::socket socket(io.get_executor());
+	
 	http_server(acceptor, socket);
-	ioc.run();
+
+	while(true){
+
+	}
 }
 
 void Server::http_server(tcp::acceptor& acceptor, tcp::socket& socket) {
