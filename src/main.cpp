@@ -3,7 +3,7 @@
 #include <memory>
 #include <string>
 #include "./Serving.h"
-#include "./instance_info.h"
+#include "./api/routes.h"
 
 namespace beast = boost::beast;
 namespace http = beast::http;
@@ -58,22 +58,20 @@ void Serving::respond(){
 
 	std::string target = request.target().to_string();
 	
-	if(target == "/v1/"){
-		
-	}
-	else if(target == "/v1/ws-meta"){
+	bool route_exists = routes.contains(target);
 
+	if(!route_exists){
+		response.result(http::status::not_found);
+		response.set(http::field::content_type, "text/plain");
+		beast::ostream(response.body()) << "File not found";
+		response.content_length(response.body().size());
+
+		write();
 	}
-	else if(target == "/"){
-		return void(instance_information(shared_from_this()));
-	}
+
+	Route route = routes.at(target);
 	
-	response.result(http::status::not_found);
-	response.set(http::field::content_type, "text/plain");
-	beast::ostream(response.body()) << "File not found";
-	response.content_length(response.body().size());
-
-	write();
+	route(shared_from_this());
 }
 
 // "Loop" forever accepting new connections.

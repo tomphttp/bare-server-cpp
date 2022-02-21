@@ -1,5 +1,5 @@
 #include "./instance_info.h"
-#include "./process_memory.h"
+#include "../process_memory.h"
 #include <rapidjson/document.h>
 #include <rapidjson/writer.h>
 
