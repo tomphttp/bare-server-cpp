@@ -1,15 +1,9 @@
-#include <boost/beast/core.hpp>
-#include <boost/beast/http.hpp>
-#include <boost/beast/version.hpp>
 #include <boost/program_options.hpp>
-#include <boost/asio.hpp>
-#include <rapidjson/document.h>
-#include <rapidjson/writer.h>
-#include <ctime>
 #include <iostream>
 #include <memory>
 #include <string>
-#include "./memory.h"
+#include "./Serving.h"
+#include "./instance_info.h"
 
 namespace beast = boost::beast;
 namespace http = beast::http;
@@ -17,115 +11,70 @@ namespace net = boost::asio;
 namespace po = boost::program_options;
 using tcp = boost::asio::ip::tcp;
 
-// 1024 squared
-constexpr unsigned long long MEGABYTE = 1048576;
+Serving::Serving(tcp::socket s) : socket(std::move(s)) {}
 
-class Serving : public std::enable_shared_from_this<Serving> {
-public:
-	Serving(tcp::socket s) : socket(std::move(s)) {}
-	void process(){
-		read();
-		init_deadline();
-	}
-private:
-	tcp::socket socket;
-	beast::flat_buffer buffer{8192};
-	http::request<http::dynamic_body> request;
-	http::response<http::dynamic_body> response;
-	net::steady_timer deadline{ socket.get_executor(), std::chrono::seconds(60) };
-	// The timer for putting a deadline on connection processing.
-	void init_deadline(){
-		std::shared_ptr<Serving> serving = shared_from_this();
+void Serving::process(){
+	read();
+	init_deadline();
+}
 
-		deadline.async_wait([serving](beast::error_code ec) {
-			if(!ec) {
-				// Close socket to cancel any outstanding operation.
-				serving->socket.close(ec);
-			}
-		});
-	}
-	void read(){ // headers and body
-		std::shared_ptr<Serving> serving = shared_from_this();
+void Serving::init_deadline(){
+	std::shared_ptr<Serving> serving = shared_from_this();
+
+	deadline.async_wait([serving](beast::error_code ec) {
+		if(!ec) {
+			// Close socket to cancel any outstanding operation.
+			serving->socket.close(ec);
+		}
+	});
+}
+
+void Serving::read(){ // headers and body
+	std::shared_ptr<Serving> serving = shared_from_this();
+
+	http::async_read(socket, buffer, request, [serving](beast::error_code ec, std::size_t bytes_transferred) {
+		boost::ignore_unused(bytes_transferred);
+		
+		if (!ec) {
+			serving->respond();
+		}else{
+			std::cerr << "error code " << ec.category().message(1) << ", " << ec.value() << std::endl;
+		}
+	});
+}
+
+void Serving::write(){
+	std::shared_ptr<Serving> serving = shared_from_this();
+
+	http::async_write(socket, response, [serving](beast::error_code ec, std::size_t) {
+		serving->socket.shutdown(tcp::socket::shutdown_send, ec);
+		// deadline.cancel();
+	});
+}
+
+void Serving::respond(){
+	response.version(request.version());
+	response.keep_alive(false);
+
+	std::string target = request.target().to_string();
 	
-		http::async_read(socket, buffer, request, [serving](beast::error_code ec, std::size_t bytes_transferred) {
-			boost::ignore_unused(bytes_transferred);
-			
-			if (!ec) {
-				serving->respond();
-			}else{
-				std::cerr << "error code " << ec.category().message(1) << ", " << ec.value() << std::endl;
-			}
-		});
-	}
-	std::string instance_information(){
-		rapidjson::Document document;
+	if(target == "/v1/"){
 		
-		document.SetObject();
-		
-		rapidjson::Document::AllocatorType& allocator = document.GetAllocator();
-
-		rapidjson::Value versions;
-
-		versions.SetArray();
-
-		versions.PushBack(rapidjson::Value().SetString("v1", allocator), allocator);
-
-		document.AddMember(rapidjson::Value().SetString("versions", allocator), versions, allocator);
-
-		document.AddMember(rapidjson::Value().SetString("language", allocator), rapidjson::Value().SetString("C++", allocator), allocator);
-
-		double vm = 0.0;
-		process_memory_usage(vm);
-
-		document.AddMember(rapidjson::Value().SetString("memoryUsage", allocator), rapidjson::Value().SetDouble(vm / MEGABYTE), allocator);
-
-		rapidjson::StringBuffer buffer;
-		rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-
-		document.Accept(writer);
-
-		return buffer.GetString();
 	}
-	void respond(){
-		response.version(request.version());
-		response.keep_alive(false);
+	else if(target == "/v1/ws-meta"){
 
-		std::string target = request.target().to_string();
-		
-		if(target == "/v1/"){
-			
-		}
-		else if(target == "/v1/ws-meta"){
-
-		}
-		else if(target == "/"){
-			std::string body = instance_information();
-
-			response.set("content-type", "application/json");
-			beast::ostream(response.body()) << body;
-			response.content_length(response.body().size());
-
-			write();
-
-			return;
-		}
-		
-		response.result(http::status::not_found);
-		response.set(http::field::content_type, "text/plain");
-		beast::ostream(response.body()) << "File not found";
-		response.content_length(response.body().size());
-
-		write();
 	}
-	void write(){
-		std::shared_ptr<Serving> serving = shared_from_this();
-
-		http::async_write(socket, response, [serving](beast::error_code ec, std::size_t) {
-			serving->socket.shutdown(tcp::socket::shutdown_send, ec);
-			// deadline.cancel();
-		});
+	else if(target == "/"){
+		return void(instance_information(shared_from_this()));
 	}
-};
+	
+	response.result(http::status::not_found);
+	response.set(http::field::content_type, "text/plain");
+	beast::ostream(response.body()) << "File not found";
+	response.content_length(response.body().size());
+
+	write();
+}
 
 // "Loop" forever accepting new connections.
 void http_server(tcp::acceptor& acceptor, tcp::socket& socket) {
