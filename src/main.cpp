@@ -12,8 +12,9 @@ namespace net = boost::asio;
 namespace po = boost::program_options;
 using tcp = boost::asio::ip::tcp;
 
-Serving::Serving(tcp::socket s)
-	: socket(std::move(s))
+Serving::Serving(tcp::socket socket_, std::shared_ptr<Server> server_)
+	: socket(std::move(socket_))
+	, server(server_)
 	, deadline(socket.get_executor()
 	, std::chrono::seconds(60))
 	, buffer(8192)
@@ -98,10 +99,12 @@ void Server::listen(std::string host, std::string port){
 }
 
 void Server::http_server(tcp::acceptor& acceptor, tcp::socket& socket) {
-	acceptor.async_accept(socket, [&](beast::error_code ec) {
-		std::make_shared<Serving>(std::move(socket))->process();
+	std::shared_ptr<Server> self = shared_from_this();
 
-		http_server(acceptor, socket);
+	acceptor.async_accept(socket, [self, &acceptor, &socket](beast::error_code ec) {
+		std::make_shared<Serving>(std::move(socket), self)->process();
+
+		self->http_server(acceptor, socket);
 	});
 }
 
