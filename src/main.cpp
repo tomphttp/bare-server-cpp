@@ -115,7 +115,7 @@ void Server::http_server(tcp::acceptor& acceptor, tcp::socket& socket) {
 }
 
 int main(int argc, char* argv[]) {
-	po::options_description desc ("Allowed options");
+	po::options_description desc("Allowed options");
     
 	std::string host;
 	std::string port;
