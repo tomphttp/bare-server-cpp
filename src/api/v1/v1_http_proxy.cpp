@@ -7,9 +7,9 @@ namespace net = boost::asio;
 namespace ssl = boost::asio::ssl;
 using tcp = net::ip::tcp;
 
-/*class Session : public std::enable_shared_from_this<Session> {
+class Session : public std::enable_shared_from_this<Session> {
 public:
-	Session(net::io_context& ioc, std::shared_ptr<Serving> _serving) : serving(_serving), resolver(net::make_strand(ioc)), stream(net::make_strand(ioc)) {}
+	Session(std::shared_ptr<Serving> _serving) : serving(_serving), resolver(net::make_strand(serving->server->iop)), stream(serving->server->iop) {}
 	std::shared_ptr<Serving> serving;
 	tcp::resolver resolver;
 	beast::tcp_stream stream;
@@ -84,15 +84,5 @@ private:
 };
 
 void v1_http_proxy(std::shared_ptr<Serving> serving) {
-	tcp::resolver resolver{ioc};
-	beast::tcp_stream stream(ioc);
-
-	std::make_shared<Session>(ioc, serving)->process("x.com", "80", "/.htaccess", 11);
-}
-*/
-
-void v1_http_proxy(std::shared_ptr<Serving> serving) {
-	boost::beast::ostream(serving->response.body()) << "Hello, World!";
-	serving->response.content_length(serving->response.body().size());
-	serving->write();
+	std::make_shared<Session>(serving)->process("x.com", "80", "/.htaccess", 11);
 }
