@@ -79,10 +79,9 @@ private:
 		message.keep_alive(true);
 		message.set("x-bare-headers", "ok");
 		
-		http::async_write_header(serving->socket, serializer, beast::bind_front_handler(&Session::on_client_write, shared_from_this()));
+		http::async_write_header(serving->socket, serializer, beast::bind_front_handler(&Session::on_client_write_headers, shared_from_this()));
 	}
-	void on_client_write(beast::error_code ec, size_t bytes_transferred){
-		std::cout << "Wrote to cli" << std::endl;
+	void on_client_write_headers(beast::error_code ec, size_t bytes_transferred){
 		http::async_read_some(stream, buffer, remote_parser, beast::bind_front_handler(&Session::on_body, shared_from_this()));
 	}
 	void on_body(beast::error_code ec, size_t bytes_transferred){
@@ -92,8 +91,7 @@ private:
 		
 		auto got = remote_parser.get();
 
-		std::cout << "read body" << std::endl;
-		std::cout << got.body() << std::endl;
+		std::cout << "read body: " << got.body() << std::endl;
 
 		/*
 		beast::ostream(serving->response.body()) << response.body();
