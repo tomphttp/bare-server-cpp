@@ -61,7 +61,7 @@ void Serving::write(){
 
 void Serving::respond(){
 	response.version(request.version());
-	response.keep_alive(false);
+	response.keep_alive(true);
 
 	std::string target = request.target().to_string();
 	
