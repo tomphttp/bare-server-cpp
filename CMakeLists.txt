@@ -25,3 +25,5 @@ add_executable(BareServer ${sources})
 
 target_link_libraries(BareServer ${CMAKE_THREAD_LIBS_INIT})
 target_link_libraries(BareServer ${Boost_LIBRARIES})
+target_link_libraries(BareServer ssl)
+target_link_libraries(BareServer crypto)
