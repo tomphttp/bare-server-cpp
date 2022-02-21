@@ -113,7 +113,6 @@ int main(int argc, char* argv[]) {
 		unsigned short listen_port = static_cast<unsigned short>(std::atoi(port.c_str()));
 
 		net::io_context ioc{1};
-
 		tcp::resolver resolver{ioc};
 		auto const iter = resolver.resolve(host, port);
 		auto const endpoint = iter->endpoint();
