@@ -12,7 +12,12 @@ namespace net = boost::asio;
 namespace po = boost::program_options;
 using tcp = boost::asio::ip::tcp;
 
-Serving::Serving(tcp::socket s) : socket(std::move(s)) {}
+Serving::Serving(tcp::socket s)
+	: socket(std::move(s))
+	, deadline(socket.get_executor()
+	, std::chrono::seconds(60))
+	, buffer(8192)
+{}
 
 void Serving::process(){
 	read();
@@ -77,14 +82,30 @@ void Serving::respond(){
 	route(shared_from_this());
 }
 
-// "Loop" forever accepting new connections.
-void http_server(tcp::acceptor& acceptor, tcp::socket& socket) {
-	acceptor.async_accept(socket, [&](beast::error_code ec) {
-		std::make_shared<Serving>(std::move(socket))->process();
-
+class Server : public std::enable_shared_from_this<Server> {
+public:
+	std::string directory;
+	Server(std::string directory_)
+		: directory(directory_)
+	{}
+	void listen(std::string host, std::string port){
+		net::io_context ioc{1};
+		tcp::resolver resolver{ioc};
+		auto const iter = resolver.resolve(host, port);
+		auto const endpoint = iter->endpoint();
+		tcp::acceptor acceptor{ioc, {endpoint.address(),endpoint.port()}};
+		tcp::socket socket{ioc};
 		http_server(acceptor, socket);
-	});
-}
+		ioc.run();
+	}
+	void http_server(tcp::acceptor& acceptor, tcp::socket& socket) {
+		acceptor.async_accept(socket, [&](beast::error_code ec) {
+			std::make_shared<Serving>(std::move(socket))->process();
+
+			http_server(acceptor, socket);
+		});
+	}
+};
 
 int main(int argc, char* argv[]) {
 	po::options_description desc ("Allowed options");
@@ -110,17 +131,8 @@ int main(int argc, char* argv[]) {
 	}
 
 	try {
-		unsigned short listen_port = static_cast<unsigned short>(std::atoi(port.c_str()));
-
-		net::io_context ioc{1};
-		tcp::resolver resolver{ioc};
-		auto const iter = resolver.resolve(host, port);
-		auto const endpoint = iter->endpoint();
-		tcp::acceptor acceptor{ioc, {endpoint.address(),endpoint.port()}};
-		tcp::socket socket{ioc};
-		http_server(acceptor, socket);
-
-		ioc.run();
+		std::shared_ptr<Server> server = std::make_shared<Server>(directory);
+		server->listen(host, port);
 	}
 	catch(std::exception const& e) {
 		std::cerr << "Error: " << e.what() << std::endl;

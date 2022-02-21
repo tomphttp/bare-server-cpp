@@ -16,8 +16,8 @@ public:
 	void process();
 	void write();
 private:
-	boost::beast::flat_buffer buffer{8192};
-	boost::asio::steady_timer deadline{ socket.get_executor(), std::chrono::seconds(60) };
+	boost::beast::flat_buffer buffer;
+	boost::asio::steady_timer deadline;
 	void init_deadline();
 	void read();
 	void respond();
