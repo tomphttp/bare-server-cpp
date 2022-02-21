@@ -48,7 +48,7 @@ private:
 		// Send the HTTP request to the remote host
 		http::async_write(stream, request,beast::bind_front_handler(&Session::on_write, shared_from_this()));
 	}
-
+	http::response_parser<http::string_body> remote_parser;
 	void on_write(beast::error_code ec, std::size_t bytes_transferred) {
 		boost::ignore_unused(bytes_transferred);
 
@@ -56,14 +56,8 @@ private:
 			return fail(ec, "write");
 		}
 		
-		http::response_parser<http::string_body> parser;
 		
-		size_t read = http::read_header(stream, buffer, parser);
-		auto got = parser.get();
-
-		for(auto it = got.begin(); it != got.end(); ++it){
-			std::cout << it->name() << " : " << it->value() << std::endl;
-		}
+		http::async_read_header(stream, buffer, remote_parser, beast::bind_front_handler(&Session::on_read_header, shared_from_this()));
 
 		// beast::flat_buffer headers;
 		// size_t read = stream.read_some(headers);
@@ -72,6 +66,13 @@ private:
 
 		// Receive the HTTP response
 		// http::async_read(stream, buffer, response, beast::bind_front_handler(&Session::on_read, shared_from_this()));
+	}
+	void on_read_header(beast::error_code ec, std::size_t bytes_transferred){
+		auto got = remote_parser.get();
+
+		for(auto it = got.begin(); it != got.end(); ++it){
+			std::cout << it->name() << " : " << it->value() << std::endl;
+		}
 	}
 	void on_read(beast::error_code ec, std::size_t bytes_transferred) {
 		if(ec) {
