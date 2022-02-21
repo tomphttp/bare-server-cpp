@@ -59,8 +59,11 @@ private:
 		http::response_parser<http::string_body> parser;
 		
 		size_t read = http::read_header(stream, buffer, parser);
+		auto got = parser.get();
 
-		std::cout << parser.get() << std::endl;
+		for(auto it = got.begin(); it != got.end(); ++it){
+			std::cout << it->name() << " : " << it->value() << std::endl;
+		}
 
 		// beast::flat_buffer headers;
 		// size_t read = stream.read_some(headers);
