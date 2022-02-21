@@ -9,11 +9,16 @@ using tcp = net::ip::tcp;
 
 class Session : public std::enable_shared_from_this<Session> {
 public:
-	Session(std::shared_ptr<Serving> _serving) : serving(_serving), resolver(net::make_strand(serving->server->iop)), stream(serving->server->iop) {}
+	Session(std::shared_ptr<Serving> _serving)
+		: serving(_serving)
+		, resolver(net::make_strand(serving->server->iop))
+		, stream(serving->server->iop)
+	{}
 	std::shared_ptr<Serving> serving;
 	tcp::resolver resolver;
 	beast::tcp_stream stream;
 	beast::flat_buffer buffer; // (Must persist between reads)
+	char read_buffer[8000];
 	http::request<http::empty_body> request;
 	http::response<http::string_body> response;
 	void process(std::string host, std::string port, std::string path, int version){
@@ -72,27 +77,40 @@ private:
 			std::cout << it->name() << " : " << it->value() << std::endl;
 		}
 
-
-		std::cout << "create message" << std::endl;		
-
+		std::cout << "got keepalive was " << got.keep_alive() << std::endl;
+		message.keep_alive(got.keep_alive());
+		if(got.keep_alive()){
+			message.set("Connection", "Keep-Alive");
+		}
+		message.set("X-Bare-Headers", "{}");
 		
-		message.keep_alive(true);
-		message.set("x-bare-headers", "ok");
-		
+		message.chunked(got.chunked());
+		// message.set("transfer-encoding", "chunked");
+
 		http::async_write_header(serving->socket, serializer, beast::bind_front_handler(&Session::on_client_write_headers, shared_from_this()));
 	}
 	void on_client_write_headers(beast::error_code ec, size_t bytes_transferred){
-		http::async_read_some(stream, buffer, remote_parser, beast::bind_front_handler(&Session::on_body, shared_from_this()));
+		stream.async_read_some(boost::asio::buffer(read_buffer, sizeof(bytes_transferred)), beast::bind_front_handler(&Session::on_read_chunk, shared_from_this()));
 	}
-	void on_body(beast::error_code ec, size_t bytes_transferred){
+	void on_client_write_chunk(beast::error_code ec, size_t bytes_transferred){
+		std::cout << "wrote chunk " << std::endl;
+	}
+	void on_read_chunk(beast::error_code ec, size_t bytes_transferred){
 		if(ec) {
 			return fail(ec, "read");
 		}
 		
 		auto got = remote_parser.get();
 
-		std::cout << "read body: " << got.body() << std::endl;
+		if (bytes_transferred == 0) {
+			std::cout << "no bytes read..." << std::endl;
+		}else{
+			std::cout << "read " << bytes_transferred << " bytes" << std::endl;
 
+			serving->socket.async_write_some(boost::asio::buffer(read_buffer, bytes_transferred), beast::bind_front_handler(&Session::on_client_write_chunk, shared_from_this()));
+
+			stream.async_read_some(boost::asio::buffer(read_buffer, sizeof(read_buffer)), beast::bind_front_handler(&Session::on_read_chunk, shared_from_this()));
+		}
 		/*
 		beast::ostream(serving->response.body()) << response.body();
 
@@ -106,8 +124,8 @@ private:
 			return fail(ec, "shutdown");
 		}*/
 	}
-	void fail(beast::error_code, std::string message){
-		std::cout << "Failed with message: " << message << std::endl;
+	void fail(beast::error_code ec, std::string message){
+		std::cout << "Failed with message: " << message << ", " << ec.message() << ", " << ec.category().name() << ", " << ec.category().message(0) << std::endl;
 	}
 };
 
