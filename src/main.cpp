@@ -82,30 +82,28 @@ void Serving::respond(){
 	route(shared_from_this());
 }
 
-class Server : public std::enable_shared_from_this<Server> {
-public:
-	std::string directory;
-	Server(std::string directory_)
-		: directory(directory_)
-	{}
-	void listen(std::string host, std::string port){
-		net::io_context ioc{1};
-		tcp::resolver resolver{ioc};
-		auto const iter = resolver.resolve(host, port);
-		auto const endpoint = iter->endpoint();
-		tcp::acceptor acceptor{ioc, {endpoint.address(),endpoint.port()}};
-		tcp::socket socket{ioc};
-		http_server(acceptor, socket);
-		ioc.run();
-	}
-	void http_server(tcp::acceptor& acceptor, tcp::socket& socket) {
-		acceptor.async_accept(socket, [&](beast::error_code ec) {
-			std::make_shared<Serving>(std::move(socket))->process();
+Server::Server(std::string directory_)
+	: directory(directory_)
+{}
 
-			http_server(acceptor, socket);
-		});
-	}
-};
+void Server::listen(std::string host, std::string port){
+	net::io_context ioc{1};
+	tcp::resolver resolver{ioc};
+	auto const iter = resolver.resolve(host, port);
+	auto const endpoint = iter->endpoint();
+	tcp::acceptor acceptor{ioc, {endpoint.address(),endpoint.port()}};
+	tcp::socket socket{ioc};
+	http_server(acceptor, socket);
+	ioc.run();
+}
+
+void Server::http_server(tcp::acceptor& acceptor, tcp::socket& socket) {
+	acceptor.async_accept(socket, [&](beast::error_code ec) {
+		std::make_shared<Serving>(std::move(socket))->process();
+
+		http_server(acceptor, socket);
+	});
+}
 
 int main(int argc, char* argv[]) {
 	po::options_description desc ("Allowed options");
