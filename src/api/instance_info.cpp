@@ -1,12 +1,12 @@
 #include "./instance_info.h"
 #include "../process_memory.h"
 #include <rapidjson/document.h>
-#include <rapidjson/writer.h>
+#include <rapidjson/prettywriter.h>
 
 // 1024 squared
 constexpr unsigned long long MEGABYTE = 1048576;
 
-void instance_information(std::shared_ptr<Serving> serving){
+void instance_information(std::shared_ptr<Serving> serving) {
 	rapidjson::Document document;
 	
 	document.SetObject();
@@ -29,7 +29,7 @@ void instance_information(std::shared_ptr<Serving> serving){
 	document.AddMember(rapidjson::Value().SetString("memoryUsage", allocator), rapidjson::Value().SetDouble(vm / MEGABYTE), allocator);
 
 	rapidjson::StringBuffer buffer;
-	rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+	rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(buffer);
 
 	document.Accept(writer);
 
