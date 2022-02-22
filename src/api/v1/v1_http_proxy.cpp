@@ -132,10 +132,11 @@ private:
 		rapidjson::StringBuffer buffer;
 		rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
 		headers.Accept(writer);
-
-		std::cout << buffer.GetString() << std::endl;
-
+	
 		response.get().set("X-Bare-Headers", buffer.GetString());
+		
+		response.get().set("X-Bare-Status", std::to_string(remote_parser.get().result_int()));
+		response.get().set("X-Bare-Status-Text", remote_parser.get().reason());
 		
 		http::async_write_header(serving->socket, serializer, beast::bind_front_handler(&Session::on_client_write_headers, shared_from_this()));
 	}
