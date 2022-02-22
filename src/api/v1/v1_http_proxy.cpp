@@ -26,7 +26,7 @@ public:
 		: serving(_serving)
 		, resolver(net::make_strand(serving->server->iop))
 		, stream(serving->server->iop)
-		, serializer(response)
+		, serializer(response.get())
 	{}
 	std::shared_ptr<Serving> serving;
 	tcp::resolver resolver;
@@ -45,7 +45,8 @@ public:
 private:
 	SessionBody body;
 	http::request<http::empty_body> request;
-	http::response<http::buffer_body> response;
+	http::parser<false, http::buffer_body> response;
+	// http::response<http::buffer_body> response;
 	http::response_serializer<http::buffer_body, http::fields> serializer;
 	http::response_parser<http::buffer_body> remote_parser;
 	void on_resolve(beast::error_code ec, tcp::resolver::results_type results) {
@@ -93,70 +94,70 @@ private:
 
 		std::cout << "got keepalive was " << got.keep_alive() << std::endl;
 		
-		response.result(http::status::ok);
-		response.version(11);
-		response.keep_alive(got.keep_alive());
+		auto response_got = response.get();
+
+		response_got.result(http::status::ok);
+		response_got.version(11);
+		response_got.keep_alive(got.keep_alive());
 
 		if(got.keep_alive()){
-			response.set("Connection", "Keep-Alive");
+			response_got.set("Connection", "Keep-Alive");
 		}
 		
-		response.set("X-Bare-Headers", "{}");
+		response_got.set("X-Bare-Headers", "{}");
 		
-    	response.set(http::field::transfer_encoding, "chunked");
-		
-		response.body().data = nullptr;
-		response.body().more = true;
+    	response_got.set(http::field::transfer_encoding, "chunked");
 		
 		http::async_write_header(serving->socket, serializer, beast::bind_front_handler(&Session::on_client_write_headers, shared_from_this()));
-		stream.async_read_some(boost::asio::buffer(read_buffer, sizeof(read_buffer)), beast::bind_front_handler(&Session::on_read_chunk, shared_from_this()));
-
 	}
 	void on_client_write_headers(beast::error_code ec, size_t bytes_transferred){
+		if (ec) {
+			return fail(ec, "writing headers");
+		}
+		
 		std::cout << "wrote headers, reading some" << std::endl;
-	}
-	bool shutdown = false;
-	void on_client_write_chunk(beast::error_code ec, size_t bytes_transferred){
-		if (ec == http::error::need_buffer) {
-			std::cout << "read more" << std::endl;
-			stream.async_read_some(boost::asio::buffer(read_buffer, sizeof(read_buffer)), beast::bind_front_handler(&Session::on_read_chunk, shared_from_this()));
-		}
-		else{
-			if (ec) {
-				return fail(ec, "writing chunk");
+
+		do {
+			if (!response.is_done()) {
+				// Set up the body for writing into our small buffer
+				response.get().body().data = read_buffer;
+				response.get().body().size = sizeof(read_buffer);
+
+				// Read as much as we can
+				http::read(stream, buffer /*DYNAMIC*/, response, ec);
+
+				// This error is returned when buffer_body uses up the buffer
+				if(ec == http::error::need_buffer) {
+					ec = {};
+				}
+
+				if (ec) {
+					return fail(ec, "after read");
+				}
+
+				// Set up the body for reading.
+				// This is how much was parsed:
+				response.get().body().size = sizeof(read_buffer) - response.get().body().size;
+				response.get().body().data = read_buffer;
+				response.get().body().more = !response.is_done();
 			}
-		
-			std::cout << "wrote chunk" << std::endl;
-
-			if(shutdown){
-				serving->socket.shutdown(tcp::socket::shutdown_send, ec);
-				serving->deadline.cancel();
-			}
-		}
-	}
-	void on_read_chunk(beast::error_code ec, size_t bytes_transferred){
-		if (ec == boost::asio::error::eof) {
-			std::cout << "eof, bytes transferred was " << bytes_transferred << std::endl;
-
-			response.body().data = read_buffer;
-            response.body().size = bytes_transferred;
-			response.body().more = false;
-
-			shutdown = true;
-		}
-		else {
-			if (ec) {
-				return fail(ec, "read");
+			else {
+				response.get().body().data = nullptr;
+				response.get().body().size = 0;
 			}
 
-			std::cout << "will transfer " << bytes_transferred << " bytes" << std::endl;
-			
-			response.body().data = read_buffer;
-            response.body().size = bytes_transferred;
-            response.body().more = true;
+			// Write everything in the buffer (which might be empty)
+			write(serving->socket, serializer, ec);
+
+			// This error is returned when buffer_body uses up the buffer
+			if(ec == http::error::need_buffer) {
+				ec = {};
+			}
+			else if(ec) {
+				return fail(ec, "writing");
+			}
 		}
-		
-		http::async_write(serving->socket, serializer, beast::bind_front_handler(&Session::on_client_write_chunk, shared_from_this()));
+		while (!remote_parser.is_done() && !serializer.is_done());
 	}
 	void fail(beast::error_code ec, std::string message){
 		std::cout << "Failed with message: " << message << ", " << ec.message() << ", " << ec.category().name() << ", " << ec.category().message(0) << std::endl;
