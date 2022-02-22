@@ -7,26 +7,14 @@ namespace net = boost::asio;
 namespace ssl = boost::asio::ssl;
 using tcp = net::ip::tcp;
 
-struct SessionBody {
-	using value_type = std::string;
-	struct SessionReader {
-		template<bool isRequest, class Headers>
-		SessionReader(http::message<isRequest, SessionBody, Headers>& m){}
-		void write(void const* data, std::size_t size, beast::error_code& ec) {
-			std::cout << "Write  " << size << std::endl;
-			// this will be called with each piece of the body, after chunk decoding
-		}
-	};
-};
-
-
 class Session : public std::enable_shared_from_this<Session> {
 public:
 	Session(std::shared_ptr<Serving> _serving)
 		: serving(_serving)
 		, resolver(net::make_strand(serving->server->iop))
 		, stream(serving->server->iop)
-		, serializer(response.get())
+		, serializer(response)
+		, remote_serializer(remote_parser.get())
 	{}
 	std::shared_ptr<Serving> serving;
 	tcp::resolver resolver;
@@ -43,12 +31,11 @@ public:
 		resolver.async_resolve(host, port, beast::bind_front_handler(&Session::on_resolve, shared_from_this()));
 	}
 private:
-	SessionBody body;
 	http::request<http::empty_body> request;
-	http::parser<false, http::buffer_body> response;
-	// http::response<http::buffer_body> response;
+	http::response<http::buffer_body> response;
 	http::response_serializer<http::buffer_body, http::fields> serializer;
 	http::response_parser<http::buffer_body> remote_parser;
+	http::response_serializer<http::buffer_body, http::fields> remote_serializer;
 	void on_resolve(beast::error_code ec, tcp::resolver::results_type results) {
 		if (ec) {
 			return fail(ec, "resolve");
@@ -89,24 +76,27 @@ private:
 		auto got = remote_parser.get();
 
 		for(auto it = got.begin(); it != got.end(); ++it){
-			std::cout << it->name() << " : " << it->value() << std::endl;
+			std::string name = it->name_string().to_string();
+			std::string value = it->value().to_string();
+			std::string lowercase = name;
+			std::for_each(lowercase.begin(), lowercase.end(), [](char& c){ c = std::tolower(c); });
+
+			std::cout << lowercase << ": " << value << std::endl;
 		}
 
 		std::cout << "got keepalive was " << got.keep_alive() << std::endl;
 		
-		auto response_got = response.get();
-
-		response_got.result(http::status::ok);
-		response_got.version(11);
-		response_got.keep_alive(got.keep_alive());
+		response.result(http::status::ok);
+		response.version(11);
+		response.keep_alive(got.keep_alive());
 
 		if(got.keep_alive()){
-			response_got.set("Connection", "Keep-Alive");
+			response.set("Connection", "Keep-Alive");
 		}
 		
-		response_got.set("X-Bare-Headers", "{}");
+		response.set("X-Bare-Headers", "{}");
 		
-    	response_got.set(http::field::transfer_encoding, "chunked");
+    	response.set(http::field::transfer_encoding, "chunked");
 		
 		http::async_write_header(serving->socket, serializer, beast::bind_front_handler(&Session::on_client_write_headers, shared_from_this()));
 	}
@@ -118,13 +108,13 @@ private:
 		std::cout << "wrote headers, reading some" << std::endl;
 
 		do {
-			if (!response.is_done()) {
+			if (!remote_parser.is_done()) {
 				// Set up the body for writing into our small buffer
-				response.get().body().data = read_buffer;
-				response.get().body().size = sizeof(read_buffer);
+				remote_parser.get().body().data = read_buffer;
+				remote_parser.get().body().size = sizeof(read_buffer);
 
 				// Read as much as we can
-				http::read(stream, buffer /*DYNAMIC*/, response, ec);
+				http::read(stream, buffer /*DYNAMIC*/, remote_parser, ec);
 
 				// This error is returned when buffer_body uses up the buffer
 				if(ec == http::error::need_buffer) {
@@ -137,18 +127,22 @@ private:
 
 				// Set up the body for reading.
 				// This is how much was parsed:
-				response.get().body().size = sizeof(read_buffer) - response.get().body().size;
-				response.get().body().data = read_buffer;
-				response.get().body().more = !response.is_done();
+				remote_parser.get().body().size = sizeof(read_buffer) - remote_parser.get().body().size;
+				remote_parser.get().body().data = read_buffer;
+				remote_parser.get().body().more = !remote_parser.is_done();
 			}
 			else {
-				response.get().body().data = nullptr;
-				response.get().body().size = 0;
+				remote_parser.get().body().data = nullptr;
+				remote_parser.get().body().size = 0;
 			}
 
+			std::cout
+				<< "Body contains " << remote_parser.get().body().size << "bytes" << std::endl
+				<< std::string((char*)remote_parser.get().body().data, remote_parser.get().body().size) << std::endl
+			;
 			// Write everything in the buffer (which might be empty)
-			write(serving->socket, serializer, ec);
-
+			http::write(serving->socket, remote_serializer, ec);
+			
 			// This error is returned when buffer_body uses up the buffer
 			if(ec == http::error::need_buffer) {
 				ec = {};
@@ -157,7 +151,7 @@ private:
 				return fail(ec, "writing");
 			}
 		}
-		while (!remote_parser.is_done() && !serializer.is_done());
+		while (!remote_parser.is_done() && !remote_serializer.is_done());
 	}
 	void fail(beast::error_code ec, std::string message){
 		std::cout << "Failed with message: " << message << ", " << ec.message() << ", " << ec.category().name() << ", " << ec.category().message(0) << std::endl;
