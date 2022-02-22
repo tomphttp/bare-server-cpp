@@ -7,6 +7,7 @@
 namespace beast = boost::beast;
 namespace http = beast::http;
 namespace net = boost::asio;
+namespace ssl = net::ssl;
 using tcp = boost::asio::ip::tcp;
 
 Serving::Serving(tcp::socket socket_, std::shared_ptr<Server> server_)

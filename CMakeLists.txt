@@ -16,9 +16,7 @@ find_package(Boost COMPONENTS program_options REQUIRED)
 
 find_library(LIBSTATGRAB NAMES statgrab PATHS)
 
-include_directories(${Boost_INCLUDE_DIRS})
-
-include_directories(${OPENSSL_INCLUDE_DIR})
+include_directories(${Boost_INCLUDE_DIRS} ${OPENSSL_INCLUDE_DIR} ./certify/include/)
 
 # add the executable
 add_executable(BareServer ${sources})
