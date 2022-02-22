@@ -76,17 +76,6 @@ private:
 		response.get().version(11);
 		response.get().keep_alive(remote_parser.get().keep_alive());
 
-		for(auto it = remote_parser.get().begin(); it != remote_parser.get().end(); ++it){
-			std::string name = it->name_string().to_string();
-			std::string value = it->value().to_string();
-			std::string lowercase = name;
-			std::for_each(lowercase.begin(), lowercase.end(), [](char& c){ c = std::tolower(c); });
-
-			std::cout << lowercase << ": " << value << std::endl;
-		}
-
-		std::cout << remote_parser.chunked() << std::endl;
-
 		response.get().chunked(remote_parser.chunked());
 
 		if(remote_parser.get().has_content_length()){
@@ -95,7 +84,58 @@ private:
 	
 		response.get().keep_alive(true);
 
-		response.get().set("X-Bare-Headers", "{}");
+
+		rapidjson::Document headers;
+		rapidjson::Document::AllocatorType& allocator = headers.GetAllocator();
+		
+		headers.SetObject();
+
+		for(auto it = remote_parser.get().begin(); it != remote_parser.get().end(); ++it){
+			std::string name = it->name_string().to_string();
+			std::string value = it->value().to_string();
+			std::string lowercase = name;
+			std::for_each(lowercase.begin(), lowercase.end(), [](char& c){ c = std::tolower(c); });
+			
+			bool appended = false;
+
+			for(auto it = headers.MemberBegin(); it != headers.MemberEnd(); ++it){
+				std::string same_lowercase(it->name.GetString(), it->name.GetStringLength());
+				std::for_each(same_lowercase.begin(), same_lowercase.end(), [](char& c){ c = std::tolower(c); });
+				
+				if(same_lowercase == lowercase){
+					// should become array
+					if(it->value.IsString()){
+						rapidjson::Value saved_value(it->value, allocator);
+
+						it->value.SetArray();
+						it->value.PushBack(saved_value, allocator);
+					}
+
+					assert(it->value.IsArray());
+
+					appended = true;
+					it->value.PushBack(rapidjson::Value().SetString(value.data(), value.length(), allocator), allocator);
+
+					break;
+				}
+			}
+
+			if(appended){
+				continue;
+			}
+
+			headers.AddMember(rapidjson::Value().SetString(name.data(), name.length(), allocator), rapidjson::Value().SetString(value.data(), value.length(), allocator), allocator);
+
+			std::cout << lowercase << ": " << value << std::endl;
+		}
+
+		rapidjson::StringBuffer buffer;
+		rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+		headers.Accept(writer);
+
+		std::cout << buffer.GetString() << std::endl;
+
+		response.get().set("X-Bare-Headers", buffer.GetString());
 		
 		http::async_write_header(serving->socket, serializer, beast::bind_front_handler(&Session::on_client_write_headers, shared_from_this()));
 	}
