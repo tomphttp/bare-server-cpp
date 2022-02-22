@@ -65,7 +65,6 @@ private:
 			return fail(ec, "write");
 		}
 		
-		
 		http::async_read_header(stream, buffer, remote_parser, beast::bind_front_handler(&Session::on_headers, shared_from_this()));
 	}
 	void on_headers(beast::error_code ec, size_t bytes_transferred){
@@ -75,6 +74,10 @@ private:
 		
 		auto got = remote_parser.get();
 
+		response.result(http::status::ok);
+		response.version(11);
+		response.keep_alive(got.keep_alive());
+
 		for(auto it = got.begin(); it != got.end(); ++it){
 			std::string name = it->name_string().to_string();
 			std::string value = it->value().to_string();
@@ -82,21 +85,24 @@ private:
 			std::for_each(lowercase.begin(), lowercase.end(), [](char& c){ c = std::tolower(c); });
 
 			std::cout << lowercase << ": " << value << std::endl;
+
+		}
+
+		std::cout << remote_parser.chunked() << std::endl;
+
+		response.chunked(remote_parser.chunked());
+
+		if(got.has_content_length()){
+			response.content_length(remote_parser.content_length());
 		}
 
 		std::cout << "got keepalive was " << got.keep_alive() << std::endl;
 		
-		response.result(http::status::ok);
-		response.version(11);
-		response.keep_alive(got.keep_alive());
-
 		if(got.keep_alive()){
 			response.set("Connection", "Keep-Alive");
 		}
 		
 		response.set("X-Bare-Headers", "{}");
-		
-    	response.set(http::field::transfer_encoding, "chunked");
 		
 		http::async_write_header(serving->socket, serializer, beast::bind_front_handler(&Session::on_client_write_headers, shared_from_this()));
 	}
