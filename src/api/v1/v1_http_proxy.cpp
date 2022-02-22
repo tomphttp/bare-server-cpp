@@ -145,56 +145,66 @@ private:
 			return fail(ec, "writing headers");
 		}
 		
+		pipe_data();
+	}
+	// Write everything in the buffer (which might be empty)
+	void write_response(){
+		response.get().body().data = remote_parser.get().body().data;
+		response.get().body().more = remote_parser.get().body().more;
+		response.get().body().size = remote_parser.get().body().size;
+
+		log_body();
+
+		auto self = shared_from_this();
+
+		http::async_write(serving->socket, serializer, [self](beast::error_code ec, size_t bytes){
+			std::cout << "wrote body " << bytes << std::endl;
+			std::cout << "remote parser done?: " << self->remote_parser.is_done() << std::endl;
+			std::cout << "serializer done?: " << self->serializer.is_done() << std::endl;
+
+			if(!self->remote_parser.is_done() && !self->serializer.is_done()){
+				self->pipe_data();
+			}
+		});
+	}
+	void pipe_data(){
 		std::cout << "wrote headers, reading some" << std::endl;
 
-		do {
-			if (!remote_parser.is_done()) {
-				// Set up the body for writing into our small buffer
-				remote_parser.get().body().data = read_buffer;
-				remote_parser.get().body().size = sizeof(read_buffer);
+		// run loop once, check if serializer and remote are done before further running loop
+		if (!remote_parser.is_done()) {
+			auto self = shared_from_this();
 
-				// Read as much as we can
-				http::read(stream, buffer /*DYNAMIC*/, remote_parser, ec);
+			// Set up the body for writing into our small buffer
+			remote_parser.get().body().data = read_buffer;
+			remote_parser.get().body().size = sizeof(read_buffer);
 
-				// This error is returned when buffer_body uses up the buffer
-				if(ec == http::error::need_buffer) {
-					ec = {};
+			// Read as much as we can
+			http::async_read(stream, buffer /*DYNAMIC*/, remote_parser, [self](beast::error_code ec, size_t bytes){
+				std::cout << "read " << bytes << std::endl;
+				
+				// need_buffer is returned when buffer_body uses up the buffer
+				if(ec && ec != http::error::need_buffer) {
+					return self->fail(ec, "after read");
 				}
 
-				if (ec) {
-					return fail(ec, "after read");
-				}
+				self->remote_parser.get().body().size = sizeof(self->read_buffer) - self->remote_parser.get().body().size;
+				self->remote_parser.get().body().data = self->read_buffer;
+				self->remote_parser.get().body().more = !self->remote_parser.is_done();		
 
-				// Set up the body for reading.
-				// This is how much was parsed:
-				remote_parser.get().body().size = sizeof(read_buffer) - remote_parser.get().body().size;
-				remote_parser.get().body().data = read_buffer;
-				remote_parser.get().body().more = !remote_parser.is_done();
-			}
-			else {
-				remote_parser.get().body().data = nullptr;
-				remote_parser.get().body().size = 0;
-			}
-
-			std::cout
-				<< "Body contains " << remote_parser.get().body().size << "bytes" << std::endl
-				<< std::string((char*)remote_parser.get().body().data, remote_parser.get().body().size) << std::endl
-			;
-
-			response.get() = remote_parser.get();
-
-			// Write everything in the buffer (which might be empty)
-			http::write(serving->socket, serializer, ec);
-			
-			// This error is returned when buffer_body uses up the buffer
-			if(ec == http::error::need_buffer) {
-				ec = {};
-			}
-			else if(ec) {
-				return fail(ec, "writing");
-			}
+				self->write_response();
+			});
 		}
-		while (!remote_parser.is_done() && !serializer.is_done());
+		else {
+			remote_parser.get().body().data = nullptr;
+			remote_parser.get().body().size = 0;
+			write_response();
+		}
+	}
+	void log_body(){
+		std::cout
+			<< "Body contains " << response.get().body().size << "bytes" << std::endl
+			<< std::string((char*)response.get().body().data, response.get().body().size) << std::endl
+		;
 	}
 	void fail(beast::error_code ec, std::string message){
 		std::cout << "Failed with message: " << message << ", " << ec.message() << ", " << ec.category().name() << ", " << ec.category().message(0) << std::endl;
