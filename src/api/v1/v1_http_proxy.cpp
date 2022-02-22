@@ -1,5 +1,7 @@
 #include "./v1_http_proxy.h"
 #include <iostream>
+#include <rapidjson/document.h>
+#include <rapidjson/writer.h>
 
 namespace beast = boost::beast;
 namespace http = beast::http;
@@ -70,13 +72,11 @@ private:
 			return fail(ec, "read");
 		}
 		
-		auto got = remote_parser.get();
-
 		response.get().result(http::status::ok);
 		response.get().version(11);
-		response.get().keep_alive(got.keep_alive());
+		response.get().keep_alive(remote_parser.get().keep_alive());
 
-		for(auto it = got.begin(); it != got.end(); ++it){
+		for(auto it = remote_parser.get().begin(); it != remote_parser.get().end(); ++it){
 			std::string name = it->name_string().to_string();
 			std::string value = it->value().to_string();
 			std::string lowercase = name;
@@ -89,16 +89,12 @@ private:
 
 		response.get().chunked(remote_parser.chunked());
 
-		if(got.has_content_length()){
+		if(remote_parser.get().has_content_length()){
 			response.get().content_length(remote_parser.content_length());
 		}
+	
+		response.get().keep_alive(true);
 
-		std::cout << "got keepalive was " << got.keep_alive() << std::endl;
-		
-		if(got.keep_alive()){
-			response.get().set("Connection", "Keep-Alive");
-		}
-		
 		response.get().set("X-Bare-Headers", "{}");
 		
 		http::async_write_header(serving->socket, serializer, beast::bind_front_handler(&Session::on_client_write_headers, shared_from_this()));
