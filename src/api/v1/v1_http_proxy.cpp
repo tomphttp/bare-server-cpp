@@ -212,5 +212,5 @@ private:
 };
 
 void v1_http_proxy(std::shared_ptr<Serving> serving) {
-	std::make_shared<Session>(serving)->process("www.httpwatch.com", "80", "/httpgallery/chunked/chunkedimage.aspx", 11);
+	std::make_shared<Session>(serving)->process("x.com", "80", "/.htaccess", 11);
 }
