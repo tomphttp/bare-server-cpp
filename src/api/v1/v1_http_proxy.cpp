@@ -9,10 +9,11 @@ namespace net = boost::asio;
 namespace ssl = boost::asio::ssl;
 using tcp = net::ip::tcp;
 
-class BaseSession : public std::enable_shared_from_this<BaseSession> {
+template<class Stream>
+class BaseSession : public std::enable_shared_from_this<BaseSession<Stream>> {
 public:
 	std::shared_ptr<Serving> serving;
-	beast::tcp_stream& stream;
+	Stream& stream;
 	http::request<http::empty_body> request;
 	http::response_parser<http::buffer_body> response;
 	http::response_serializer<http::buffer_body, http::fields> serializer;
@@ -20,7 +21,7 @@ public:
 	beast::flat_buffer buffer;
 	tcp::resolver resolver;
 	char read_buffer[8000];
-	BaseSession(std::shared_ptr<Serving> serving_, beast::tcp_stream& stream_)
+	BaseSession(std::shared_ptr<Serving> serving_, Stream& stream_)
 		: serving(serving_)
 		, serializer(response.get())
 		, resolver(net::make_strand(serving->server->iop))
@@ -33,7 +34,7 @@ public:
 		request.set(http::field::host, host);
 		request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
 
-		resolver.async_resolve(host, port, beast::bind_front_handler(&BaseSession::on_resolve, shared_from_this()));
+		resolver.async_resolve(host, port, beast::bind_front_handler(&BaseSession::on_resolve, this->shared_from_this()));
 	}
 	virtual void _connect(tcp::resolver::results_type results, std::function<void()> callback) = 0;
 	virtual void _on_connect(std::function<void()> callback) = 0;
@@ -64,7 +65,7 @@ public:
 			return fail(ec, "write");
 		}
 		
-		http::async_read_header(this->stream, buffer, remote_parser, beast::bind_front_handler(&BaseSession::on_headers, this->shared_from_this()));
+		http::async_read_header(stream, buffer, remote_parser, beast::bind_front_handler(&BaseSession::on_headers, this->shared_from_this()));
 	}
 	void on_headers(beast::error_code ec, size_t bytes_transferred){
 		if(ec) {
@@ -178,7 +179,7 @@ public:
 			remote_parser.get().body().size = sizeof(read_buffer);
 
 			// Read as much as we can
-			http::async_read(this->stream, buffer /*DYNAMIC*/, remote_parser, [self](beast::error_code ec, size_t bytes){
+			http::async_read(stream, buffer /*DYNAMIC*/, remote_parser, [self](beast::error_code ec, size_t bytes){
 				std::cout << "read " << bytes << std::endl;
 				
 				// need_buffer is returned when buffer_body uses up the buffer
@@ -223,7 +224,7 @@ public:
 	{}
 };*/
 
-class SessionHTTP : public BaseSession {
+class SessionHTTP : public BaseSession<beast::tcp_stream> {
 public:
 	beast::tcp_stream stream_;
 	void _connect(tcp::resolver::results_type results, std::function<void()> callback){
@@ -247,8 +248,47 @@ public:
 	{}
 };
 
+class SessionHTTPS : public BaseSession<beast::ssl_stream<beast::tcp_stream>> {
+public:
+	beast::ssl_stream<beast::tcp_stream> stream_;
+	void _connect(tcp::resolver::results_type results, std::function<void()> callback){
+		auto self = this->shared_from_this();
+
+		std::string host = results->host_name();
+		
+		if(!SSL_set_tlsext_host_name(stream_.native_handle(), host.c_str())) {
+			beast::error_code ec{static_cast<int>(::ERR_get_error()), net::error::get_ssl_category()};
+			return fail(ec, "Setting SSL hostname");
+		}
+		
+		beast::get_lowest_layer(stream_).async_connect(results, [self,callback](beast::error_code ec, tcp::resolver::results_type::endpoint_type){
+			if(ec) {
+				return self->fail(ec, "connect");
+			}
+
+			callback();
+
+		});
+	}
+	void _on_connect(std::function<void()> callback){
+		auto self = this->shared_from_this();
+		
+		stream_.async_handshake(ssl::stream_base::client, [self,callback](const boost::system::error_code& ec){
+			if(ec){
+				return self->fail(ec, "SSL handshake");
+			}
+
+			callback();
+		});
+	}
+	SessionHTTPS(std::shared_ptr<Serving> serving_)
+		: stream_(serving_->server->iop, serving->server->ssl_ctx)
+		, BaseSession(serving_, stream_)
+	{}
+};
+
 void v1_http_proxy(std::shared_ptr<Serving> serving) {
-	std::make_shared<SessionHTTP>(serving)->process("x.com", "80", "/.htaccess", 11);
+	std::make_shared<SessionHTTPS>(serving)->process("sys32.dev", "443", "/", 11);
 }
 
 /*struct SessionHTTPS {
@@ -261,10 +301,7 @@ void v1_http_proxy(std::shared_ptr<Serving> serving) {
 		void _on_resolve(tcp::resolver::results_type results, Callback connect_callback){
 			std::string host = results->host_name();
 
-			if(! SSL_set_tlsext_host_name(stream.native_handle(), host.c_str())) {
-				beast::error_code ec{static_cast<int>(::ERR_get_error()), net::error::get_ssl_category()};
-				throw beast::system_error{ec};
-			}
+			
 
 			std::shared_ptr<decltype(connect_callback)> shared_callback = connect_callback;
 
