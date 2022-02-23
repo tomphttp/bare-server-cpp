@@ -1,4 +1,5 @@
 #include "./v1_http_proxy.h"
+#include "./v1_http_headers.h"
 #include <iostream>
 #include <rapidjson/document.h>
 #include <rapidjson/writer.h>
@@ -9,30 +10,40 @@ namespace net = boost::asio;
 namespace ssl = boost::asio::ssl;
 using tcp = net::ip::tcp;
 
+/*template<class Stream>
+class PipeBody : public std::enable_shared_from_this<BaseSession<Stream>> {
+
+};*/
+
 template<class Stream>
 class BaseSession : public std::enable_shared_from_this<BaseSession<Stream>> {
 public:
 	std::shared_ptr<Serving> serving;
 	Stream& stream;
-	http::request<http::empty_body> request;
+	http::request<http::buffer_body> request;
 	http::response<http::buffer_body> response;
+	http::request<http::buffer_body> outgoing_request;
 	http::response_serializer<http::buffer_body, http::fields> serializer;
 	http::response_parser<http::buffer_body> remote_parser;
 	beast::flat_buffer buffer;
 	tcp::resolver resolver;
 	char read_buffer[8000];
-	BaseSession(std::shared_ptr<Serving> serving_, Stream& stream_)
+	BaseSession(std::shared_ptr<Serving> serving_, const http::request<http::buffer_body>& outgoing_request_, Stream& stream_)
 		: serving(serving_)
 		, serializer(response)
 		, resolver(net::make_strand(serving->server->iop))
 		, stream(stream_)
+		, request(serving->request)
+		, outgoing_request(outgoing_request_)
 	{}
-	void process(std::string host, std::string port, std::string path, int version){
-		request.version(version);
-		request.method(http::verb::get);
-		request.target(path);
-		request.set(http::field::host, host);
-		request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
+	void process(std::string host, std::string port){
+		// "sys32.dev", "443", "/", 11
+		// std::string host, std::string port, std::string path, int version
+		/*outgoing_request.version(request.version);
+		outgoing_request.method(http::verb::get);
+		outgoing_request.target(path);
+		outgoing_request.set(http::field::host, host);
+		outgoing_request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);*/
 
 		resolver.async_resolve(host, port, beast::bind_front_handler(&BaseSession::on_resolve, this->shared_from_this()));
 	}
@@ -55,7 +66,7 @@ public:
 			// self->stream.expires_after(std::chrono::seconds(30));
 
 			// Send the HTTP request to the remote host
-			http::async_write(self->stream, self->request, beast::bind_front_handler(&BaseSession::on_write, self->shared_from_this()));
+			http::async_write(self->stream, self->outgoing_request, beast::bind_front_handler(&BaseSession::on_write, self->shared_from_this()));
 		});
 	}
 	void on_write(beast::error_code ec, size_t bytes_transferred) {
@@ -242,9 +253,9 @@ public:
 	void _on_connect(std::function<void()> callback){
 		callback();
 	}
-	SessionHTTP(std::shared_ptr<Serving> serving_)
+	SessionHTTP(std::shared_ptr<Serving> serving_, const http::request<http::buffer_body>& outgoing_request_)
 		: stream_(serving_->server->iop)
-		, BaseSession(serving_, stream_)
+		, BaseSession(serving_, outgoing_request_, stream_)
 	{}
 };
 
@@ -281,61 +292,41 @@ public:
 			callback();
 		});
 	}
-	SessionHTTPS(std::shared_ptr<Serving> serving_)
+	SessionHTTPS(std::shared_ptr<Serving> serving_, const http::request<http::buffer_body>& outgoing_request_)
 		: stream_(serving_->server->iop, serving->server->ssl_ctx)
-		, BaseSession(serving_, stream_)
+		, BaseSession(serving_, outgoing_request_, stream_)
 	{}
 };
 
 void v1_http_proxy(std::shared_ptr<Serving> serving) {
-	std::make_shared<SessionHTTPS>(serving)->process("sys32.dev", "443", "/", 11);
+	/*http::request<http::buffer_body> outgoing_request;
+
+	std::string error, host, port, protocol;
+	unsigned int status = 200;
+
+	// outgoing_request.body() = serving->request.body();
+	
+	if(!read_headers(status, error, host, port, protocol, serving->request, outgoing_request)){
+		beast::ostream(serving->response.body()) << error;
+		serving->response.set(http::field::content_type, "application/json");
+		serving->response.result(status);
+		serving->write();
+		return;
+	}
+
+	if(protocol == "http:"){
+		std::make_shared<SessionHTTPS>(serving, outgoing_request)->process(host, port);
+	}else if(protocol == "https:"){
+		std::make_shared<SessionHTTP>(serving, outgoing_request)->process(host, port);
+	}*/
+	
+	http::request<http::buffer_body> outgoing_request;
+	outgoing_request.version(11);
+	outgoing_request.method(http::verb::get);
+	outgoing_request.target("/");
+	outgoing_request.set(http::field::host, "sys32.dev");
+	outgoing_request.body().data = nullptr;
+	outgoing_request.body().more = false;
+
+	std::make_shared<SessionHTTPS>(serving, outgoing_request)->process("sys32.dev", "443");
 }
-
-/*struct SessionHTTPS {
-	class DeriveSession {
-	public:
-		DeriveSession(std::shared_ptr<Serving> serving)
-			: stream(serving->server->iop, serving->server->ssl_ctx)
-		{}
-		template<typename Callback>
-		void _on_resolve(tcp::resolver::results_type results, Callback connect_callback){
-			std::string host = results->host_name();
-
-			
-
-			std::shared_ptr<decltype(connect_callback)> shared_callback = connect_callback;
-
-			beast::get_lowest_layer(stream).async_connect(results.begin(), results.end(), [shared_callback](){
-				shared_callback();
-			});
-		}
-		template<typename Callback>
-		void _on_connect(Callback callback){
-			stream.async_handshake(ssl::stream_base::client, [callback](const boost::system::error_code& ec){
-				callback(ec);
-			});
-		}
-	};
-};*/
-
-/*class DeriveSession : public std::enable_shared_from_this<DeriveSession> {
-public:
-	beast::tcp_stream stream;
-	SessionHTTP()
-		: stream(serving->server->iop)
-	{}
-
-resolve:		
-		stream.async_connect(results, beast::bind_front_handler(&Session::on_connect, self->shared_from_this()));
-
-};
-
-, tcp::resolver::results_type::endpoint_type
-
-	Session(std::shared_ptr<Serving> _serving)
-		: Derive::DeriveSession::DeriveSession(_serving)
-		, serving(_serving)
-		, serializer(response.get())
-		, resolver(net::make_strand(serving->server->iop))
-	{}
-	*/
