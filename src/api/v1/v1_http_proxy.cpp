@@ -9,19 +9,23 @@ namespace net = boost::asio;
 namespace ssl = boost::asio::ssl;
 using tcp = net::ip::tcp;
 
-class Session : public std::enable_shared_from_this<Session> {
+class BaseSession : public std::enable_shared_from_this<BaseSession> {
 public:
-	Session(std::shared_ptr<Serving> _serving)
-		: serving(_serving)
-		, resolver(net::make_strand(serving->server->iop))
-		, stream(serving->server->iop)
-		, serializer(response.get())
-	{}
 	std::shared_ptr<Serving> serving;
+	beast::tcp_stream& stream;
+	http::request<http::empty_body> request;
+	http::response_parser<http::buffer_body> response;
+	http::response_serializer<http::buffer_body, http::fields> serializer;
+	http::response_parser<http::buffer_body> remote_parser;
+	beast::flat_buffer buffer;
 	tcp::resolver resolver;
-	beast::tcp_stream stream;
-	beast::flat_buffer buffer; // (Must persist between reads)
 	char read_buffer[8000];
+	BaseSession(std::shared_ptr<Serving> serving_, beast::tcp_stream& stream_)
+		: serving(serving_)
+		, serializer(response.get())
+		, resolver(net::make_strand(serving->server->iop))
+		, stream(stream_)
+	{}
 	void process(std::string host, std::string port, std::string path, int version){
 		request.version(version);
 		request.method(http::verb::get);
@@ -29,34 +33,29 @@ public:
 		request.set(http::field::host, host);
 		request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
 
-		resolver.async_resolve(host, port, beast::bind_front_handler(&Session::on_resolve, shared_from_this()));
+		resolver.async_resolve(host, port, beast::bind_front_handler(&BaseSession::on_resolve, shared_from_this()));
 	}
-private:
-	http::request<http::empty_body> request;
-	http::response_parser<http::buffer_body> response;
-	http::response_serializer<http::buffer_body, http::fields> serializer;
-	http::response_parser<http::buffer_body> remote_parser;
+	virtual void _connect(tcp::resolver::results_type results, std::function<void()> callback) = 0;
+	virtual void _on_connect(std::function<void()> callback) = 0;
 	void on_resolve(beast::error_code ec, tcp::resolver::results_type results) {
 		if (ec) {
 			return fail(ec, "resolve");
 		}
 		// Set a timeout on the operation
-		stream.expires_after(std::chrono::seconds(30));
+		// stream.expires_after(std::chrono::seconds(30));
 
-		// Make the connection on the IP address we get from a lookup
-		stream.async_connect(results, beast::bind_front_handler(&Session::on_connect, shared_from_this()));
+		_connect(results, beast::bind_front_handler(&BaseSession::on_connect, this->shared_from_this()));
 	}
+	void on_connect() {
+		auto self = this->shared_from_this();
 
-	void on_connect(beast::error_code ec, tcp::resolver::results_type::endpoint_type) {
-		if(ec) {
-			return fail(ec, "connect");
-		}
+		_on_connect([self](){
+			// Set a timeout on the operation
+			// self->stream.expires_after(std::chrono::seconds(30));
 
-		// Set a timeout on the operation
-		stream.expires_after(std::chrono::seconds(30));
-
-		// Send the HTTP request to the remote host
-		http::async_write(stream, request, beast::bind_front_handler(&Session::on_write, shared_from_this()));
+			// Send the HTTP request to the remote host
+			http::async_write(self->stream, self->request, beast::bind_front_handler(&BaseSession::on_write, self->shared_from_this()));
+		});
 	}
 	void on_write(beast::error_code ec, size_t bytes_transferred) {
 		boost::ignore_unused(bytes_transferred);
@@ -65,7 +64,7 @@ private:
 			return fail(ec, "write");
 		}
 		
-		http::async_read_header(stream, buffer, remote_parser, beast::bind_front_handler(&Session::on_headers, shared_from_this()));
+		http::async_read_header(this->stream, buffer, remote_parser, beast::bind_front_handler(&BaseSession::on_headers, this->shared_from_this()));
 	}
 	void on_headers(beast::error_code ec, size_t bytes_transferred){
 		if(ec) {
@@ -137,8 +136,8 @@ private:
 		
 		response.get().set("X-Bare-Status", std::to_string(remote_parser.get().result_int()));
 		response.get().set("X-Bare-Status-Text", remote_parser.get().reason());
-		
-		http::async_write_header(serving->socket, serializer, beast::bind_front_handler(&Session::on_client_write_headers, shared_from_this()));
+
+		http::async_write_header(serving->socket, serializer, beast::bind_front_handler(&BaseSession::on_client_write_headers, this->shared_from_this()));
 	}
 	void on_client_write_headers(beast::error_code ec, size_t bytes_transferred){
 		if (ec) {
@@ -155,7 +154,7 @@ private:
 
 		log_body();
 
-		auto self = shared_from_this();
+		auto self = this->shared_from_this();
 
 		http::async_write(serving->socket, serializer, [self](beast::error_code ec, size_t bytes){
 			std::cout << "wrote body " << bytes << std::endl;
@@ -172,14 +171,14 @@ private:
 
 		// run loop once, check if serializer and remote are done before further running loop
 		if (!remote_parser.is_done()) {
-			auto self = shared_from_this();
+			auto self = this->shared_from_this();
 
 			// Set up the body for writing into our small buffer
 			remote_parser.get().body().data = read_buffer;
 			remote_parser.get().body().size = sizeof(read_buffer);
 
 			// Read as much as we can
-			http::async_read(stream, buffer /*DYNAMIC*/, remote_parser, [self](beast::error_code ec, size_t bytes){
+			http::async_read(this->stream, buffer /*DYNAMIC*/, remote_parser, [self](beast::error_code ec, size_t bytes){
 				std::cout << "read " << bytes << std::endl;
 				
 				// need_buffer is returned when buffer_body uses up the buffer
@@ -211,6 +210,95 @@ private:
 	}
 };
 
+/*class SessionHTTPS : public BaseSession {
+private:
+	beast::ssl_stream<beast::tcp_stream> ssl_stream;
+public:
+	SessionHTTPS_test(std::shared_ptr<Serving> serving_)
+		: serving(serving_)
+		, ssl_stream(serving->server->iop, serving->server->ssl_ctx)
+		, stream(ssl_stream.get())
+		, serializer(response.get())
+		, resolver(net::make_strand(serving->server->iop))
+	{}
+};*/
+
+class SessionHTTP : public BaseSession {
+public:
+	beast::tcp_stream stream_;
+	void _connect(tcp::resolver::results_type results, std::function<void()> callback){
+		auto self = this->shared_from_this();
+
+		stream.async_connect(results, [self,callback](beast::error_code ec, tcp::resolver::results_type::endpoint_type){
+			if(ec) {
+				return self->fail(ec, "connect");
+			}
+
+			callback();
+
+		});
+	}
+	void _on_connect(std::function<void()> callback){
+		callback();
+	}
+	SessionHTTP(std::shared_ptr<Serving> serving_)
+		: stream_(serving_->server->iop)
+		, BaseSession(serving_, stream_)
+	{}
+};
+
 void v1_http_proxy(std::shared_ptr<Serving> serving) {
-	std::make_shared<Session>(serving)->process("x.com", "80", "/.htaccess", 11);
+	std::make_shared<SessionHTTP>(serving)->process("x.com", "80", "/.htaccess", 11);
 }
+
+/*struct SessionHTTPS {
+	class DeriveSession {
+	public:
+		DeriveSession(std::shared_ptr<Serving> serving)
+			: stream(serving->server->iop, serving->server->ssl_ctx)
+		{}
+		template<typename Callback>
+		void _on_resolve(tcp::resolver::results_type results, Callback connect_callback){
+			std::string host = results->host_name();
+
+			if(! SSL_set_tlsext_host_name(stream.native_handle(), host.c_str())) {
+				beast::error_code ec{static_cast<int>(::ERR_get_error()), net::error::get_ssl_category()};
+				throw beast::system_error{ec};
+			}
+
+			std::shared_ptr<decltype(connect_callback)> shared_callback = connect_callback;
+
+			beast::get_lowest_layer(stream).async_connect(results.begin(), results.end(), [shared_callback](){
+				shared_callback();
+			});
+		}
+		template<typename Callback>
+		void _on_connect(Callback callback){
+			stream.async_handshake(ssl::stream_base::client, [callback](const boost::system::error_code& ec){
+				callback(ec);
+			});
+		}
+	};
+};*/
+
+/*class DeriveSession : public std::enable_shared_from_this<DeriveSession> {
+public:
+	beast::tcp_stream stream;
+	SessionHTTP()
+		: stream(serving->server->iop)
+	{}
+
+resolve:		
+		stream.async_connect(results, beast::bind_front_handler(&Session::on_connect, self->shared_from_this()));
+
+};
+
+, tcp::resolver::results_type::endpoint_type
+
+	Session(std::shared_ptr<Serving> _serving)
+		: Derive::DeriveSession::DeriveSession(_serving)
+		, serving(_serving)
+		, serializer(response.get())
+		, resolver(net::make_strand(serving->server->iop))
+	{}
+	*/
