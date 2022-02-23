@@ -168,19 +168,6 @@ public:
 	}
 };
 
-/*class SessionHTTPS : public BaseSession {
-private:
-	beast::ssl_stream<beast::tcp_stream> ssl_stream;
-public:
-	SessionHTTPS_test(std::shared_ptr<Serving> serving_)
-		: serving(serving_)
-		, ssl_stream(serving->server->iop, serving->server->ssl_ctx)
-		, stream(ssl_stream.get())
-		, serializer(response.get())
-		, resolver(net::make_strand(serving->server->iop))
-	{}
-};*/
-
 class SessionHTTP : public BaseSession<beast::tcp_stream> {
 public:
 	beast::tcp_stream stream_;
