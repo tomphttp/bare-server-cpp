@@ -15,7 +15,7 @@ public:
 	std::shared_ptr<Serving> serving;
 	Stream& stream;
 	http::request<http::empty_body> request;
-	http::response_parser<http::buffer_body> response;
+	http::response<http::buffer_body> response;
 	http::response_serializer<http::buffer_body, http::fields> serializer;
 	http::response_parser<http::buffer_body> remote_parser;
 	beast::flat_buffer buffer;
@@ -23,7 +23,7 @@ public:
 	char read_buffer[8000];
 	BaseSession(std::shared_ptr<Serving> serving_, Stream& stream_)
 		: serving(serving_)
-		, serializer(response.get())
+		, serializer(response)
 		, resolver(net::make_strand(serving->server->iop))
 		, stream(stream_)
 	{}
@@ -72,17 +72,17 @@ public:
 			return fail(ec, "read");
 		}
 		
-		response.get().result(http::status::ok);
-		response.get().version(11);
-		response.get().keep_alive(remote_parser.get().keep_alive());
+		response.result(http::status::ok);
+		response.version(11);
+		response.keep_alive(remote_parser.get().keep_alive());
 
-		response.get().chunked(remote_parser.chunked());
+		response.chunked(remote_parser.chunked());
 
 		if(remote_parser.get().has_content_length()){
-			response.get().content_length(remote_parser.content_length());
+			response.content_length(remote_parser.content_length());
 		}
 	
-		response.get().keep_alive(true);
+		response.keep_alive(true);
 
 
 		rapidjson::Document headers;
@@ -133,10 +133,10 @@ public:
 		rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
 		headers.Accept(writer);
 	
-		response.get().set("X-Bare-Headers", buffer.GetString());
+		response.set("X-Bare-Headers", buffer.GetString());
 		
-		response.get().set("X-Bare-Status", std::to_string(remote_parser.get().result_int()));
-		response.get().set("X-Bare-Status-Text", remote_parser.get().reason());
+		response.set("X-Bare-Status", std::to_string(remote_parser.get().result_int()));
+		response.set("X-Bare-Status-Text", remote_parser.get().reason());
 
 		http::async_write_header(serving->socket, serializer, beast::bind_front_handler(&BaseSession::on_client_write_headers, this->shared_from_this()));
 	}
@@ -149,9 +149,9 @@ public:
 	}
 	// Write everything in the buffer (which might be empty)
 	void write_response(){
-		response.get().body().data = remote_parser.get().body().data;
-		response.get().body().more = remote_parser.get().body().more;
-		response.get().body().size = remote_parser.get().body().size;
+		response.body().data = remote_parser.get().body().data;
+		response.body().more = remote_parser.get().body().more;
+		response.body().size = remote_parser.get().body().size;
 
 		log_body();
 
@@ -202,8 +202,8 @@ public:
 	}
 	void log_body(){
 		std::cout
-			<< "Body contains " << response.get().body().size << "bytes" << std::endl
-			<< std::string((char*)response.get().body().data, response.get().body().size) << std::endl
+			<< "Body contains " << response.body().size << "bytes" << std::endl
+			<< std::string((char*)response.body().data, response.body().size) << std::endl
 		;
 	}
 	void fail(beast::error_code ec, std::string message){
