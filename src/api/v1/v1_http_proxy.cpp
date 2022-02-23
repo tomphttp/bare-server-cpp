@@ -1,8 +1,6 @@
 #include "./v1_http_proxy.h"
 #include "./v1_http_headers.h"
 #include <iostream>
-#include <rapidjson/document.h>
-#include <rapidjson/writer.h>
 
 namespace beast = boost::beast;
 namespace http = beast::http;
@@ -95,59 +93,7 @@ public:
 	
 		response.keep_alive(true);
 
-
-		rapidjson::Document headers;
-		rapidjson::Document::AllocatorType& allocator = headers.GetAllocator();
-		
-		headers.SetObject();
-
-		for(auto it = remote_parser.get().begin(); it != remote_parser.get().end(); ++it){
-			std::string name = it->name_string().to_string();
-			std::string value = it->value().to_string();
-			std::string lowercase = name;
-			std::for_each(lowercase.begin(), lowercase.end(), [](char& c){ c = std::tolower(c); });
-			
-			bool appended = false;
-
-			for(auto it = headers.MemberBegin(); it != headers.MemberEnd(); ++it){
-				std::string same_lowercase(it->name.GetString(), it->name.GetStringLength());
-				std::for_each(same_lowercase.begin(), same_lowercase.end(), [](char& c){ c = std::tolower(c); });
-				
-				if(same_lowercase == lowercase){
-					// should become array
-					if(it->value.IsString()){
-						rapidjson::Value saved_value(it->value, allocator);
-
-						it->value.SetArray();
-						it->value.PushBack(saved_value, allocator);
-					}
-
-					assert(it->value.IsArray());
-
-					appended = true;
-					it->value.PushBack(rapidjson::Value().SetString(value.data(), value.length(), allocator), allocator);
-
-					break;
-				}
-			}
-
-			if(appended){
-				continue;
-			}
-
-			headers.AddMember(rapidjson::Value().SetString(name.data(), name.length(), allocator), rapidjson::Value().SetString(value.data(), value.length(), allocator), allocator);
-
-			std::cout << lowercase << ": " << value << std::endl;
-		}
-
-		rapidjson::StringBuffer buffer;
-		rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-		headers.Accept(writer);
-	
-		response.set("X-Bare-Headers", buffer.GetString());
-		
-		response.set("X-Bare-Status", std::to_string(remote_parser.get().result_int()));
-		response.set("X-Bare-Status-Text", remote_parser.get().reason());
+		write_headers(remote_parser.get(), response);
 
 		http::async_write_header(serving->socket, serializer, beast::bind_front_handler(&BaseSession::on_client_write_headers, this->shared_from_this()));
 	}
