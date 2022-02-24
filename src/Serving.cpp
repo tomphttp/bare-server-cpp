@@ -19,7 +19,7 @@ Serving::Serving(tcp::socket socket_, std::shared_ptr<Server> server_)
 void Serving::process(){ // headers and body
 	std::shared_ptr<Serving> serving = shared_from_this();
 
-	http::async_read(socket, buffer, request, [serving](beast::error_code ec, std::size_t bytes_transferred) {
+	http::async_read_header(socket, buffer, request_parser, [serving](beast::error_code ec, std::size_t bytes_transferred) {
 		boost::ignore_unused(bytes_transferred);
 		
 		if (!ec) {
@@ -39,10 +39,10 @@ void Serving::write(){
 }
 
 void Serving::respond(){
-	response.version(request.version());
+	response.version(request_parser.get().version());
 	response.keep_alive(true);
 
-	std::string target = request.target().to_string();
+	std::string target = request_parser.get().target().to_string();
 	
 	bool route_exists = routes.contains(target);
 

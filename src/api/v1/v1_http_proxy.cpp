@@ -16,9 +16,9 @@ public:
 	Stream& stream;
 	http::response<http::buffer_body> response;
 	http::request<http::buffer_body> outgoing_request;
-	http::response_serializer<http::buffer_body, http::fields> response_serializer;
-	http::request_serializer<http::buffer_body, http::fields> request_serializer;
-	http::request_parser<http::buffer_body> request_parser;
+	http::response_serializer<http::buffer_body> response_serializer;
+	http::request_serializer<http::buffer_body> request_serializer;
+	http::request_parser<http::buffer_body>& request_parser;
 	http::response_parser<http::buffer_body> remote_parser;
 	beast::flat_buffer buffer;
 	tcp::resolver resolver;
@@ -29,6 +29,7 @@ public:
 		, stream(stream_)
 		, outgoing_request(outgoing_request_)
 		, request_serializer(outgoing_request)
+		, request_parser(serving->request_parser)
 		, response_serializer(response)
 	{}
 	void process(std::string host, std::string port){
@@ -71,7 +72,7 @@ public:
 			return fail(ec, "write");
 		}
 
-		request_parser.get() = http::request<http::buffer_body>(serving->request);
+		std::cout << request_parser.get()["host"] << std::endl;
 		
 		std::cout << "Begin to pipe request" << std::endl;
 		pipe_request();
