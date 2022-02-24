@@ -41,7 +41,7 @@ bool read_headers(
 		
 		if(lowercase == "x-bare-method"){
 			bare_method = true;
-			request.method(value);
+			request.method_string(value);
 		}
 
 		if(lowercase == "x-bare-headers"){
