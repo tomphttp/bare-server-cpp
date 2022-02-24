@@ -51,10 +51,13 @@ void Serving::respond(){
 	
 	size_t directory_index = target.find(server->directory);
 
-	target = "/" + std::string(target.begin() + directory_index + server->directory.length(), target.end());
+	if(directory_index == std::string::npos){
+		json(404, R"({"message":"Not found."})");
+		return;
+	}
 
-	std::cout << target << std::endl;
-
+	target = "/" + target.substr(directory_index + server->directory.length());
+	
 	bool route_exists = routes.contains(target);
 
 	if(!route_exists){
