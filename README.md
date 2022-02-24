@@ -9,7 +9,7 @@ sudo apt install libssl-dev
 
 - Boost
 
->= 1.72
+`>= 1.72`
 
 ~~`sudo apt install libboost-dev`~~
 Get latest version
