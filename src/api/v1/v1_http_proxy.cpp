@@ -23,6 +23,8 @@ public:
 	beast::flat_buffer buffer;
 	tcp::resolver resolver;
 	char read_buffer[8000];
+	virtual void _connect(tcp::resolver::results_type results, std::function<void()> callback) = 0;
+	virtual void _on_connect(std::function<void()> callback) = 0;
 	BaseSession(std::shared_ptr<Serving> serving_, const http::request<http::buffer_body>& outgoing_request_, Stream& stream_)
 		: serving(serving_)
 		, resolver(net::make_strand(serving->server->iop))
@@ -34,18 +36,8 @@ public:
 		, response(serving->response)
 	{}
 	void process(std::string host, std::string port){
-		// "sys32.dev", "443", "/", 11
-		// std::string host, std::string port, std::string path, int version
-		/*outgoing_request.version(request.version);
-		outgoing_request.method(http::verb::get);
-		outgoing_request.target(path);
-		outgoing_request.set(http::field::host, host);
-		outgoing_request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);*/
-
 		resolver.async_resolve(host, port, beast::bind_front_handler(&BaseSession::on_resolve, this->shared_from_this()));
 	}
-	virtual void _connect(tcp::resolver::results_type results, std::function<void()> callback) = 0;
-	virtual void _on_connect(std::function<void()> callback) = 0;
 	void on_resolve(beast::error_code ec, tcp::resolver::results_type results) {
 		if (ec) {
 			return fail(ec, "resolve");
@@ -91,14 +83,9 @@ public:
 		auto self = this->shared_from_this();
 
 		http::async_write(serving->socket, request_serializer, [self](beast::error_code ec, size_t bytes){
-			/*std::cout << "wrote body " << bytes << std::endl;
-			std::cout << "request parser done?: " << self->request_parser.is_done() << std::endl;
-			std::cout << "serializer done?: " << self->request_serializer.is_done() << std::endl;*/
-
 			if(!self->request_parser.is_done() && !self->request_serializer.is_done()){
 				self->pipe_request();
 			}else{
-				// std::cout << "done " << std::endl;
 				http::async_read_header(self->stream, self->buffer, self->remote_parser, beast::bind_front_handler(&BaseSession::on_headers, self->shared_from_this()));
 			}
 		});
@@ -114,8 +101,6 @@ public:
 
 			// Read as much as we can
 			http::async_read(serving->socket, serving->buffer /*DYNAMIC*/, request_parser, [self](beast::error_code ec, size_t bytes){
-				// std::cout << "read " << bytes << std::endl;
-				
 				// need_buffer is returned when buffer_body uses up the buffer
 				if(ec && ec != http::error::need_buffer) {
 					return self->fail(ec, "after read");
@@ -170,18 +155,9 @@ public:
 		response.body().more = remote_parser.get().body().more;
 		response.body().size = remote_parser.get().body().size;
 
-		/*std::cout
-			<< "Body contains " << response.body().size << "bytes" << std::endl
-			<< std::string((char*)response.body().data, response.body().size) << std::endl
-		;*/
-
 		auto self = this->shared_from_this();
 
 		http::async_write(serving->socket, response_serializer, [self](beast::error_code ec, size_t bytes){
-			/*std::cout << "wrote body " << bytes << std::endl;
-			std::cout << "response parser done?: " << self->remote_parser.is_done() << std::endl;
-			std::cout << "serializer done?: " << self->response_serializer.is_done() << std::endl;*/
-
 			if(!self->remote_parser.is_done() && !self->response_serializer.is_done()){
 				self->pipe_remote();
 			}
@@ -197,9 +173,7 @@ public:
 			remote_parser.get().body().size = sizeof(read_buffer);
 
 			// Read as much as we can
-			http::async_read(stream, buffer /*DYNAMIC*/, remote_parser, [self](beast::error_code ec, size_t bytes){
-				// std::cout << "read " << bytes << std::endl;
-				
+			http::async_read(stream, buffer, remote_parser, [self](beast::error_code ec, size_t bytes){
 				// need_buffer is returned when buffer_body uses up the buffer
 				if(ec && ec != http::error::need_buffer) {
 					return self->fail(ec, "after read");
@@ -291,25 +265,14 @@ void v1_http_proxy(std::shared_ptr<Serving> serving) {
 	outgoing_request.version(11);
 	
 	std::string host, port, protocol;
-	
-	// outgoing_request.body() = serving->request.body();
-	
+
 	if(!read_headers(host, port, protocol, serving, outgoing_request)){
 		return;
 	}
-
-	// std::cout << http::request<http::empty_body>(outgoing_request) << std::endl;
 
 	if(protocol == "http:"){
 		std::make_shared<SessionHTTP>(serving, outgoing_request)->process(host, port);
 	}else if(protocol == "https:"){
 		std::make_shared<SessionHTTPS>(serving, outgoing_request)->process(host, port);
 	}
-	
-	/*http::request<http::buffer_body> outgoing_request;
-	outgoing_request.method(http::verb::get);
-	outgoing_request.target("/tests/post.php");
-	outgoing_request.set(http::field::host, "sys32.dev");
-	
-	std::make_shared<SessionHTTPS>(serving, outgoing_request)->process("sys32.dev", "443");*/
 }
