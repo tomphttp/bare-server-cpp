@@ -28,13 +28,12 @@ bool read_headers(
 	std::shared_ptr<Serving> serving,
 	http::request<http::buffer_body>& request
 ){
-	bool bare_headers = false;
+	std::string bare_headers;
+	std::string bare_forward_headers;
 	bool bare_protocol = false;
 	bool bare_path = false;
 	bool bare_port = false;
 	bool bare_host = false;
-
-	request.method_string(serving->request_parser.get().method_string());
 
 	for(auto it = serving->request_parser.get().begin(); it != serving->request_parser.get().end(); ++it){
 		std::string name = it->name_string().to_string();
@@ -63,52 +62,26 @@ bool read_headers(
 		}
 
 		if(lowercase == "x-bare-headers"){
-			bare_headers = true;
-
-			rapidjson::Document document;
-
-			if(rapidjson::ParseResult result = document.Parse(value.c_str(), value.length()); result.IsError()){
-				serving->json(400, R"({"code":"INVALID_BARE_HEADER","id":"request.headers.x-bare-headers","message":)" + serialize_string(std::string("Header contained invalid JSON. (") + GetParseError_En(result.Code()) + ")") + R"(}})");
-				return false;
-			}
-
-			if(!document.IsObject()){
-				serving->json(400, R"({"code":"INVALID_BARE_HEADER","id":"request.headers.x-bare-headers","message":"Headers object was not an object."})");
-				return false;
-			}
-
-			for(auto it = document.MemberBegin(); it != document.MemberEnd(); ++it){
-				std::string name(it->name.GetString(), it->name.GetStringLength());
-				const rapidjson::Value& value = it->value;
-
-				if(value.IsString()){
-					request.set(name, std::string(value.GetString(), value.GetStringLength()));
-				}else if(value.IsArray()){
-					for(auto it = document.Begin(); it != document.End(); ++it){
-						const rapidjson::Value& value = *it;
-
-						if(value.IsString()){
-							request.set(name, std::string(value.GetString(), value.GetStringLength()));
-						}else{
-							serving->json(400, R"({"code":"INVALID_BARE_HEADER","id":)" + serialize_string("bare.headers." + name) + R"(,"message":"Header was not a String or Array."})");
-							return false;
-						}
-					}
-				}else{
-					serving->json(400, R"({"code":"INVALID_BARE_HEADER","id":)" + serialize_string("bare.headers." + name) + R"(,"message":"Header was not a String or Array."})");
-					return false;
-				}
-			}
+			bare_headers = value;
+		}
+		
+		if(lowercase == "x-bare-forward-headers"){
+			bare_forward_headers = value;
 		}
 	}
 
-	if((!bare_headers || !bare_protocol || !bare_path || !bare_port || !bare_host) && serving->request_parser.get().method_string() == "OPTIONS"){
+	if((!bare_headers.length() || !bare_forward_headers.length() || !bare_protocol || !bare_path || !bare_port || !bare_host) && serving->request_parser.get().method_string() == "OPTIONS"){
 		serving->write();
 		return false;
 	}
 	
-	if(!bare_headers){
+	if(!bare_headers.length()){
 		serving->json(400, R"({"code":"MISSING_BARE_HEADER","id":"request.headers.x-bare-headers","message":"Header was not specified."})");
+		return false;
+	}
+
+	if(!bare_forward_headers.length()){
+		serving->json(400, R"({"code":"MISSING_BARE_HEADER","id":"request.headers.x-bare-forward-headers","message":"Header was not specified."})");
 		return false;
 	}
 	
@@ -132,6 +105,92 @@ bool read_headers(
 		return false;
 	}
 	
+	// bare_headers
+	{
+		rapidjson::Document document;
+
+		if(rapidjson::ParseResult result = document.Parse(bare_headers.c_str(), bare_headers.length()); result.IsError()){
+			serving->json(400, R"({"code":"INVALID_BARE_HEADER","id":"request.headers.x-bare-headers","message":)" + serialize_string(std::string("Header contained invalid JSON. (") + GetParseError_En(result.Code()) + ")") + R"(}})");
+			return false;
+		}
+
+		if(!document.IsObject()){
+			serving->json(400, R"({"code":"INVALID_BARE_HEADER","id":"request.headers.x-bare-headers","message":"Headers object was not an object."})");
+			return false;
+		}
+
+		for(auto it = document.MemberBegin(); it != document.MemberEnd(); ++it){
+			std::string name(it->name.GetString(), it->name.GetStringLength());
+			const rapidjson::Value& value = it->value;
+
+			if(value.IsString()){
+				request.set(name, std::string(value.GetString(), value.GetStringLength()));
+			}else if(value.IsArray()){
+				for(auto it = document.Begin(); it != document.End(); ++it){
+					const rapidjson::Value& value = *it;
+
+					if(value.IsString()){
+						request.set(name, std::string(value.GetString(), value.GetStringLength()));
+					}else{
+						serving->json(400, R"({"code":"INVALID_BARE_HEADER","id":)" + serialize_string("bare.headers." + name) + R"(,"message":"Header was not a String or Array."})");
+						return false;
+					}
+				}
+			}else{
+				serving->json(400, R"({"code":"INVALID_BARE_HEADER","id":)" + serialize_string("bare.headers." + name) + R"(,"message":"Header was not a String or Array."})");
+				return false;
+			}
+		}
+	}
+
+	// forward_headers
+	{
+		rapidjson::Document document;
+
+		if(rapidjson::ParseResult result = document.Parse(bare_forward_headers.c_str(), bare_forward_headers.length()); result.IsError()){
+			serving->json(400, R"({"code":"INVALID_BARE_HEADER","id":"request.headers.x-bare-forward-headers","message":)" + serialize_string(std::string("Header contained invalid JSON. (") + GetParseError_En(result.Code()) + ")") + R"(}})");
+			return false;
+		}
+
+		if(!document.IsArray()){
+			serving->json(400, R"({"code":"INVALID_BARE_HEADER","id":"request.headers.x-bare-forward-headers","message":"Forwarded headers was not an array."})");
+			return false;
+		}
+
+		std::vector<std::string> names = {
+			"content-length",
+			"transfer-encoding",
+		};
+
+		for(auto it = document.Begin(); it != document.End(); ++it){
+			if(!it->IsString()){
+				serving->json(400, R"({"code":"INVALID_BARE_HEADER","id":)" + serialize_string("request.headers.x-bare-forward-headers") + R"(,"message":"Header was not a String."})");
+				return false;
+			}
+			
+			std::string name(it->GetString(), it->GetStringLength());
+			names.push_back(name);
+		}
+
+		for(std::string name : names){
+			std::string lowercase = name;
+			std::for_each(lowercase.begin(), lowercase.end(), [](char& c){ c = std::tolower(c); });
+
+			for(auto it = serving->request_parser.get().begin(); it != serving->request_parser.get().end(); ++it){
+				std::string same = it->name_string().to_string();
+				std::string same_lowercase = same;
+				std::for_each(same_lowercase.begin(), same_lowercase.end(), [](char& c){ c = std::tolower(c); });
+				std::string value = it->value().to_string();
+
+				if(same_lowercase == lowercase){
+					request.set(same, value);
+				}
+			}
+		}
+	}
+
+	request.method_string(serving->request_parser.get().method_string());
+
 	return true;
 }
 
@@ -150,6 +209,10 @@ void write_headers(
 		std::string lowercase = name;
 		std::for_each(lowercase.begin(), lowercase.end(), [](char& c){ c = std::tolower(c); });
 		
+		if(lowercase == "content-encoding" || lowercase == "content-length" || lowercase == "transfer-encoding"){
+			response.set(name, value);
+		}
+
 		bool appended = false;
 
 		for(auto it = headers.MemberBegin(); it != headers.MemberEnd(); ++it){
