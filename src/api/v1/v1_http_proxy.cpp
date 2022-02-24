@@ -1,6 +1,7 @@
 #include "./v1_http_proxy.h"
 #include "./v1_http_headers.h"
 #include <iostream>
+#include <sstream>
 
 namespace beast = boost::beast;
 namespace http = beast::http;
@@ -13,12 +14,11 @@ class BaseSession : public std::enable_shared_from_this<BaseSession<Stream>> {
 public:
 	std::shared_ptr<Serving> serving;
 	Stream& stream;
-	http::request<http::buffer_body> request;
 	http::response<http::buffer_body> response;
 	http::request<http::buffer_body> outgoing_request;
 	http::response_serializer<http::buffer_body, http::fields> response_serializer;
 	http::request_serializer<http::buffer_body, http::fields> request_serializer;
-	http::response_parser<http::buffer_body> request_parser;
+	http::request_parser<http::buffer_body> request_parser;
 	http::response_parser<http::buffer_body> remote_parser;
 	beast::flat_buffer buffer;
 	tcp::resolver resolver;
@@ -27,7 +27,6 @@ public:
 		: serving(serving_)
 		, resolver(net::make_strand(serving->server->iop))
 		, stream(stream_)
-		, request(serving->request)
 		, outgoing_request(outgoing_request_)
 		, request_serializer(outgoing_request)
 		, response_serializer(response)
@@ -71,6 +70,8 @@ public:
 		if(ec) {
 			return fail(ec, "write");
 		}
+
+		request_parser.get() = http::request<http::buffer_body>(serving->request);
 		
 		std::cout << "Begin to pipe request" << std::endl;
 		pipe_request();
