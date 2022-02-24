@@ -31,18 +31,22 @@ bool read_headers(
 ){
 	bool bare_headers = false;
 	bool bare_protocol = false;
+	bool bare_path = false;
 	bool bare_port = false;
 	bool bare_host = false;
 
-	request.method_string(request.method_string());
+	request.method_string(serving->request_parser.get().method_string());
 
 	for(auto it = serving->request_parser.get().begin(); it != serving->request_parser.get().end(); ++it){
 		std::string name = it->name_string().to_string();
 		std::string value = it->value().to_string();
 		std::string lowercase = name;
 		std::for_each(lowercase.begin(), lowercase.end(), [](char& c){ c = std::tolower(c); });
-		
-		std::cout << lowercase << std::endl;
+
+		if(lowercase == "x-bare-path"){
+			bare_path = true;
+			request.target(value);
+		}
 
 		if(lowercase == "x-bare-host"){
 			bare_host = true;
@@ -99,7 +103,7 @@ bool read_headers(
 		}
 	}
 
-	if((!bare_headers || !bare_protocol || !bare_port || !bare_host) && serving->request_parser.get().method_string() == "OPTIONS"){
+	if((!bare_headers || !bare_protocol || !bare_path || !bare_port || !bare_host) && serving->request_parser.get().method_string() == "OPTIONS"){
 		serving->write();
 		return false;
 	}
@@ -114,6 +118,11 @@ bool read_headers(
 		return false;
 	}
 	
+	if(!bare_path){
+		serving->json(400, R"({"code":"MISSING_BARE_HEADER","id":"request.headers.x-bare-path","message":"Header was not specified."})");
+		return false;
+	}
+
 	if(!bare_host){
 		serving->json(400, R"({"code":"MISSING_BARE_HEADER","id":"request.headers.x-bare-host","message":"Header was not specified."})");
 		return false;

@@ -86,17 +86,17 @@ public:
 		outgoing_request.body().more = request_parser.get().body().more;
 		outgoing_request.body().size = request_parser.get().body().size;
 
-		std::cout
+		/*std::cout
 			<< "Body contains " << outgoing_request.body().size << "bytes" << std::endl
 			<< std::string((char*)outgoing_request.body().data, outgoing_request.body().size) << std::endl
-		;
+		;*/
 
 		auto self = this->shared_from_this();
 
 		http::async_write(serving->socket, request_serializer, [self](beast::error_code ec, size_t bytes){
-			std::cout << "wrote body " << bytes << std::endl;
+			/*std::cout << "wrote body " << bytes << std::endl;
 			std::cout << "request parser done?: " << self->request_parser.is_done() << std::endl;
-			std::cout << "serializer done?: " << self->request_serializer.is_done() << std::endl;
+			std::cout << "serializer done?: " << self->request_serializer.is_done() << std::endl;*/
 
 			if(!self->request_parser.is_done() && !self->request_serializer.is_done()){
 				self->pipe_request();
@@ -117,7 +117,7 @@ public:
 
 			// Read as much as we can
 			http::async_read(serving->socket, serving->buffer /*DYNAMIC*/, request_parser, [self](beast::error_code ec, size_t bytes){
-				std::cout << "read " << bytes << std::endl;
+				// std::cout << "read " << bytes << std::endl;
 				
 				// need_buffer is returned when buffer_body uses up the buffer
 				if(ec && ec != http::error::need_buffer) {
@@ -172,17 +172,17 @@ public:
 		response.body().more = remote_parser.get().body().more;
 		response.body().size = remote_parser.get().body().size;
 
-		std::cout
+		/*std::cout
 			<< "Body contains " << response.body().size << "bytes" << std::endl
 			<< std::string((char*)response.body().data, response.body().size) << std::endl
-		;
+		;*/
 
 		auto self = this->shared_from_this();
 
 		http::async_write(serving->socket, response_serializer, [self](beast::error_code ec, size_t bytes){
-			std::cout << "wrote body " << bytes << std::endl;
+			/*std::cout << "wrote body " << bytes << std::endl;
 			std::cout << "response parser done?: " << self->remote_parser.is_done() << std::endl;
-			std::cout << "serializer done?: " << self->response_serializer.is_done() << std::endl;
+			std::cout << "serializer done?: " << self->response_serializer.is_done() << std::endl;*/
 
 			if(!self->remote_parser.is_done() && !self->response_serializer.is_done()){
 				self->pipe_remote();
@@ -200,7 +200,7 @@ public:
 
 			// Read as much as we can
 			http::async_read(stream, buffer /*DYNAMIC*/, remote_parser, [self](beast::error_code ec, size_t bytes){
-				std::cout << "read " << bytes << std::endl;
+				// std::cout << "read " << bytes << std::endl;
 				
 				// need_buffer is returned when buffer_body uses up the buffer
 				if(ec && ec != http::error::need_buffer) {
@@ -300,10 +300,12 @@ void v1_http_proxy(std::shared_ptr<Serving> serving) {
 		return;
 	}
 
+	std::cout << http::request<http::empty_body>(outgoing_request) << std::endl;
+
 	if(protocol == "http:"){
-		std::make_shared<SessionHTTPS>(serving, outgoing_request)->process(host, port);
-	}else if(protocol == "https:"){
 		std::make_shared<SessionHTTP>(serving, outgoing_request)->process(host, port);
+	}else if(protocol == "https:"){
+		std::make_shared<SessionHTTPS>(serving, outgoing_request)->process(host, port);
 	}
 	
 	/*http::request<http::buffer_body> outgoing_request;
