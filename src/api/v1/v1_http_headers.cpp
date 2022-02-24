@@ -2,7 +2,6 @@
 #include <rapidjson/document.h>
 #include <rapidjson/writer.h>
 #include <rapidjson/error/en.h>
-#include <iostream>
 
 namespace beast = boost::beast;
 namespace http = beast::http;

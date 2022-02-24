@@ -73,12 +73,9 @@ public:
 			return fail(ec, "write");
 		}
 
-		std::cout << request_parser.get()["host"] << std::endl;
+		// std::cout << "Begin to pipe request" << std::endl;
 		
-		std::cout << "Begin to pipe request" << std::endl;
 		pipe_request();
-
-		// http::async_read_header(stream, buffer, remote_parser, beast::bind_front_handler(&BaseSession::on_headers, this->shared_from_this()));
 	}
 	// Write everything in the buffer (which might be empty)
 	void write_request(){
@@ -101,7 +98,7 @@ public:
 			if(!self->request_parser.is_done() && !self->request_serializer.is_done()){
 				self->pipe_request();
 			}else{
-				std::cout << "done " << std::endl;
+				// std::cout << "done " << std::endl;
 				http::async_read_header(self->stream, self->buffer, self->remote_parser, beast::bind_front_handler(&BaseSession::on_headers, self->shared_from_this()));
 			}
 		});
@@ -163,7 +160,8 @@ public:
 			return fail(ec, "writing headers");
 		}
 		
-		std::cout << "Begin to pipe remote" << std::endl;
+		// std::cout << "Begin to pipe remote" << std::endl;
+		
 		pipe_remote();
 	}
 	// Write everything in the buffer (which might be empty)
@@ -300,7 +298,7 @@ void v1_http_proxy(std::shared_ptr<Serving> serving) {
 		return;
 	}
 
-	std::cout << http::request<http::empty_body>(outgoing_request) << std::endl;
+	// std::cout << http::request<http::empty_body>(outgoing_request) << std::endl;
 
 	if(protocol == "http:"){
 		std::make_shared<SessionHTTP>(serving, outgoing_request)->process(host, port);
