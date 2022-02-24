@@ -16,10 +16,10 @@ int main(int argc, char* argv[]) {
 
 	desc.add_options ()
 		("help", "Print help")
-		("d,directory", po::value(&directory)->value_name("<string>")->default_value("/"), "Bare directory")
-		("h,host", po::value(&host)->value_name("<string>")->default_value("localhost"), "Listening host")
-		("p,port", po::value(&port)->value_name("<number>")->default_value("80"), "Listening port")
-		("t,threads", po::value(&threads)->value_name("<number>")->default_value(4), "Amount of IO threads")
+		("directory,d", po::value(&directory)->value_name("<string>")->default_value("/"), "Bare directory")
+		("host,h", po::value(&host)->value_name("<string>")->default_value("localhost"), "Listening host")
+		("port,p", po::value(&port)->value_name("<number>")->default_value("80"), "Listening port")
+		("threads,t", po::value(&threads)->value_name("<number>")->default_value(4), "Amount of IO threads")
 	;
     
     po::variables_map vm;

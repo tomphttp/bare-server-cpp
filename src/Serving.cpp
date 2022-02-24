@@ -42,6 +42,11 @@ void Serving::respond(){
 	response.version(request_parser.get().version());
 	response.keep_alive(true);
 
+	response.set("X-Robots-Tag", "noindex");
+	response.set("Access-Control-Allow-Headers", "*");
+	response.set("Access-Control-Allow-Origin", "*");
+	response.set("Access-Control-Allow-Headers", "*");
+
 	std::string target = request_parser.get().target().to_string();
 	
 	size_t directory_index = target.find(server->directory);
