@@ -2,6 +2,7 @@
 #include <rapidjson/document.h>
 #include <rapidjson/writer.h>
 #include <rapidjson/error/en.h>
+#include <iostream>
 
 namespace beast = boost::beast;
 namespace http = beast::http;
@@ -47,13 +48,13 @@ bool read_headers(
 
 			rapidjson::Document document;
 
-			if(rapidjson::ParseResult result = document.Parse(value.c_str(), value.length())){
-				serving->json(400, R"({"error":{"code":"INVALID_BARE_HEADER","id":"request.headers.x-bare-headers","message":)" + serialize_string(std::string("Header contained invalid JSON. (") + GetParseError_En(result.Code()) + ")") + R"(}})");
+			if(rapidjson::ParseResult result = document.Parse(value.c_str(), value.length()); result.IsError()){
+				serving->json(400, R"({"code":"INVALID_BARE_HEADER","id":"request.headers.x-bare-headers","message":)" + serialize_string(std::string("Header contained invalid JSON. (") + GetParseError_En(result.Code()) + ")") + R"(}})");
 				return false;
 			}
 
 			if(!document.IsObject()){
-				serving->json(400, R"({"error":{"code":"INVALID_BARE_HEADER","id":"request.headers.x-bare-headers","message":"Headers object was not an object."}})");
+				serving->json(400, R"({"code":"INVALID_BARE_HEADER","id":"request.headers.x-bare-headers","message":"Headers object was not an object."})");
 				return false;
 			}
 
@@ -70,25 +71,30 @@ bool read_headers(
 						if(value.IsString()){
 							request.set(name, std::string(value.GetString(), value.GetStringLength()));
 						}else{
-							serving->json(400, R"({"error":{"code":"INVALID_BARE_HEADER","id":)" + serialize_string("bare.headers." + name) + R"(,"message":"Header was not a String or Array."}})");
+							serving->json(400, R"({"code":"INVALID_BARE_HEADER","id":)" + serialize_string("bare.headers." + name) + R"(,"message":"Header was not a String or Array."})");
 							return false;
 						}
 					}
 				}else{
-					serving->json(400, R"({"error":{"code":"INVALID_BARE_HEADER","id":)" + serialize_string("bare.headers." + name) + R"(,"message":"Header was not a String or Array."}})");
+					serving->json(400, R"({"code":"INVALID_BARE_HEADER","id":)" + serialize_string("bare.headers." + name) + R"(,"message":"Header was not a String or Array."})");
 					return false;
 				}
 			}
 		}
 	}
 
+	if((!bare_method || !bare_headers) && serving->request_parser.get().method_string() == "OPTIONS"){
+		serving->write();
+		return false;
+	}
+
 	if(!bare_method){
-		serving->json(400, R"({"error":{"code":"MISSING_BARE_HEADER","id":"request.headers.x-bare-method","message":"Header was not specified."}})");
+		serving->json(400, R"({"code":"MISSING_BARE_HEADER","id":"request.headers.x-bare-method","message":"Header was not specified."})");
 		return false;
 	}
 	
 	if(!bare_headers){
-		serving->json(400, R"({"error":{"code":"MISSING_BARE_HEADER","id":"request.headers.x-bare-headers","message":"Header was not specified."}})");
+		serving->json(400, R"({"code":"MISSING_BARE_HEADER","id":"request.headers.x-bare-headers","message":"Header was not specified."})");
 		return false;
 	}
 	

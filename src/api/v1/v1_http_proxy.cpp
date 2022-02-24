@@ -31,6 +31,7 @@ public:
 		, request_serializer(outgoing_request)
 		, request_parser(serving->request_parser)
 		, response_serializer(response)
+		, response(serving->response)
 	{}
 	void process(std::string host, std::string port){
 		// "sys32.dev", "443", "/", 11
