@@ -198,8 +198,10 @@ public:
 		std::string error_category = ec.category().name();
 		std::string error_category_message = ec.category().message(0);
 
-		std::cout << "Failed at " << where << ", " << error_message << ", " << error_category << ", " << error_category_message << std::endl;
-
+		if(serving->server->log_errors){
+			std::cerr << "Failed at " << where << ", " << error_message << ", " << error_category << ", " << error_category_message << std::endl;
+		}
+		
 		unsigned int status = 400;
 		std::string json = R"({"code":"UNKNOWN","id":)" + serialize_string(error_category) + R"(,"message":)" + serialize_string(error_message + " (At" + where + ")") + R"(})";
 		
