@@ -1,5 +1,6 @@
 #include "./v1_http_proxy.h"
 #include "./v1_http_headers.h"
+#include "../../serialize_string.h"
 #include <iostream>
 #include <sstream>
 
@@ -40,7 +41,11 @@ public:
 	}
 	void on_resolve(beast::error_code ec, tcp::resolver::results_type results) {
 		if (ec) {
-			return fail(ec, "resolve");
+			if(ec == boost::asio::error::host_not_found){
+				return void(serving->json(500, R"({"code":"HOST_NOT_FOUND","id":"request","message":"The specified host could not be resolved."})"));
+			}
+
+			return fail(ec, "Resolving host");
 		}
 		// Set a timeout on the operation
 		// stream.expires_after(std::chrono::seconds(30));
@@ -62,7 +67,7 @@ public:
 		boost::ignore_unused(bytes_transferred);
 
 		if(ec) {
-			return fail(ec, "write");
+			return fail(ec, "Sending headers to remote");
 		}
 
 		// std::cout << "Begin to pipe request" << std::endl;
@@ -74,11 +79,6 @@ public:
 		outgoing_request.body().data = request_parser.get().body().data;
 		outgoing_request.body().more = request_parser.get().body().more;
 		outgoing_request.body().size = request_parser.get().body().size;
-
-		/*std::cout
-			<< "Body contains " << outgoing_request.body().size << "bytes" << std::endl
-			<< std::string((char*)outgoing_request.body().data, outgoing_request.body().size) << std::endl
-		;*/
 
 		auto self = this->shared_from_this();
 
@@ -103,7 +103,7 @@ public:
 			http::async_read(serving->socket, serving->buffer /*DYNAMIC*/, request_parser, [self](beast::error_code ec, size_t bytes){
 				// need_buffer is returned when buffer_body uses up the buffer
 				if(ec && ec != http::error::need_buffer) {
-					return self->fail(ec, "after read");
+					return self->fail(ec, "Piping request, async_read");
 				}
 
 				self->request_parser.get().body().size = sizeof(self->read_buffer) - self->request_parser.get().body().size;
@@ -121,7 +121,7 @@ public:
 	}
 	void on_headers(beast::error_code ec, size_t bytes_transferred){
 		if(ec) {
-			return fail(ec, "read");
+			return fail(ec, "On remote headers");
 		}
 		
 		response.result(http::status::ok);
@@ -142,7 +142,7 @@ public:
 	}
 	void on_client_write_headers(beast::error_code ec, size_t bytes_transferred){
 		if (ec) {
-			return fail(ec, "writing headers");
+			return fail(ec, "After sending headers to client");
 		}
 		
 		// std::cout << "Begin to pipe remote" << std::endl;
@@ -176,7 +176,7 @@ public:
 			http::async_read(stream, buffer, remote_parser, [self](beast::error_code ec, size_t bytes){
 				// need_buffer is returned when buffer_body uses up the buffer
 				if(ec && ec != http::error::need_buffer) {
-					return self->fail(ec, "after read");
+					return self->fail(ec, "Piping remote, async_read");
 				}
 
 				self->remote_parser.get().body().size = sizeof(self->read_buffer) - self->remote_parser.get().body().size;
@@ -192,8 +192,29 @@ public:
 			write_remote_response();
 		}
 	}
-	void fail(beast::error_code ec, std::string message){
-		std::cout << "Failed with message: " << message << ", " << ec.message() << ", " << ec.category().name() << ", " << ec.category().message(0) << std::endl;
+	void on_write_fail(beast::error_code ec, size_t bytes){}
+	void fail(beast::error_code ec, std::string where){
+		std::string error_message = ec.message();
+		std::string error_category = ec.category().name();
+		std::string error_category_message = ec.category().message(0);
+
+		std::cout << "Failed at " << where << ", " << error_message << ", " << error_category << ", " << error_category_message << std::endl;
+
+		unsigned int status = 400;
+		std::string json = R"({"code":"UNKNOWN","id":)" + serialize_string(error_category) + R"(,"message":)" + serialize_string(error_message + " (At" + where + ")") + R"(})";
+		
+		if(!response_serializer.is_header_done()){
+			serving->json(status, json);
+		}else if(!response_serializer.is_done()){
+			// custom response body for the debugger
+			std::string debug = R"({"statusCode":)" + std::to_string(status) + R"(,"error":)" + json + R"(})";
+
+			response.body().data = debug.data();
+			response.body().size = debug.size();
+			response.body().more = false;
+						
+			http::async_write(serving->socket, response_serializer, beast::bind_front_handler(&BaseSession::on_write_fail, this->shared_from_this()));
+		}
 	}
 };
 
@@ -209,7 +230,6 @@ public:
 			}
 
 			callback();
-
 		});
 	}
 	void _on_connect(std::function<void()> callback){
@@ -240,7 +260,6 @@ public:
 			}
 
 			callback();
-
 		});
 	}
 	void _on_connect(std::function<void()> callback){
