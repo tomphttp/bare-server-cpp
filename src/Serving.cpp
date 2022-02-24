@@ -45,7 +45,7 @@ void Serving::respond(){
 	response.set("X-Robots-Tag", "noindex");
 	response.set("Access-Control-Allow-Headers", "*");
 	response.set("Access-Control-Allow-Origin", "*");
-	response.set("Access-Control-Allow-Headers", "*");
+	response.set("Access-Control-Expose-Headers", "*");
 
 	std::string target = request_parser.get().target().to_string();
 	
