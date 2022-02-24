@@ -3,6 +3,12 @@
 #include <rapidjson/writer.h>
 #include <rapidjson/error/en.h>
 
+namespace beast = boost::beast;
+namespace http = beast::http;
+namespace net = boost::asio;
+namespace ssl = boost::asio::ssl;
+using tcp = net::ip::tcp;
+
 std::string serialize_string(std::string unserialized){
 	rapidjson::StringBuffer buffer;
 	rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
@@ -15,8 +21,17 @@ std::string serialize_string(std::string unserialized){
 	return { buffer.GetString(), buffer.GetSize() };
 }
 
-bool read_headers(unsigned int& error_status, std::string& error, std::string& host, std::string& port, std::string& protocol, const boost::beast::http::request_header<boost::beast::http::fields>& server_request, boost::beast::http::request_header<boost::beast::http::fields>& request) {
+bool read_headers(
+	unsigned int& error_status,
+	std::string& error,
+	std::string& host,
+	std::string& port,
+	std::string& protocol,
+	const http::request<http::buffer_body>& server_request,
+	http::request<http::buffer_body>& request
+){
 	bool bare_headers = false;
+	bool bare_method = false;
 
 	for(auto it = server_request.begin(); it != server_request.end(); ++it){
 		std::string name = it->name_string().to_string();
@@ -24,9 +39,14 @@ bool read_headers(unsigned int& error_status, std::string& error, std::string& h
 		std::string lowercase = name;
 		std::for_each(lowercase.begin(), lowercase.end(), [](char& c){ c = std::tolower(c); });
 		
+		if(lowercase == "x-bare-method"){
+			bare_method = true;
+			request.method(value);
+		}
 
 		if(lowercase == "x-bare-headers"){
 			bare_headers = true;
+
 			rapidjson::Document document;
 
 			if(rapidjson::ParseResult result = document.Parse(value.c_str(), value.length())){
@@ -45,13 +65,15 @@ bool read_headers(unsigned int& error_status, std::string& error, std::string& h
 				std::string name(it->name.GetString(), it->name.GetStringLength());
 				const rapidjson::Value& value = it->value;
 
-				if(value.IsArray()){
-					
-				}else if(value.IsString()){
+				if(value.IsString()){
+					request.set(name, std::string(value.GetString(), value.GetStringLength()));
+				}else if(value.IsArray()){
 					for(auto it = document.Begin(); it != document.End(); ++it){
 						const rapidjson::Value& value = *it;
 
 						if(value.IsString()){
+							request.set(name, std::string(value.GetString(), value.GetStringLength()));
+						}else{
 							error = R"({"error":{"code":"INVALID_BARE_HEADER","id":)" + serialize_string("bare.headers." + name) + R"(,"message":"Header was not a String or Array."}})";
 							error_status = 400;
 							return false;
@@ -66,6 +88,12 @@ bool read_headers(unsigned int& error_status, std::string& error, std::string& h
 		}
 	}
 
+	if(!bare_method){
+		error = R"({"error":{"code":"MISSING_BARE_HEADER","id":"request.headers.x-bare-method","message":"Header was not specified."}})";
+		error_status = 400;
+		return false;
+	}
+	
 	if(!bare_headers){
 		error = R"({"error":{"code":"MISSING_BARE_HEADER","id":"request.headers.x-bare-headers","message":"Header was not specified."}})";
 		error_status = 400;
@@ -75,7 +103,10 @@ bool read_headers(unsigned int& error_status, std::string& error, std::string& h
 	return true;
 }
 
-void write_headers(const boost::beast::http::response_header<boost::beast::http::fields>& remote, boost::beast::http::response_header<boost::beast::http::fields>& response){
+void write_headers(
+	const http::response<http::buffer_body>& remote,
+	http::response<http::buffer_body>& response
+){
 	rapidjson::Document headers;
 	rapidjson::Document::AllocatorType& allocator = headers.GetAllocator();
 
