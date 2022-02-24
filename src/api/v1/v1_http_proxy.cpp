@@ -291,18 +291,11 @@ void v1_http_proxy(std::shared_ptr<Serving> serving) {
 	http::request<http::buffer_body> outgoing_request;
 	outgoing_request.version(11);
 	
-	std::string error, host, port, protocol;
-	unsigned int status = 200;
-
+	std::string host, port, protocol;
+	
 	// outgoing_request.body() = serving->request.body();
 	
-	http::request<http::buffer_body>& got = serving->request_parser.get();
-
-	if(!read_headers(status, error, host, port, protocol, got, outgoing_request)){
-		beast::ostream(serving->response.body()) << error;
-		serving->response.set(http::field::content_type, "application/json");
-		serving->response.result(status);
-		serving->write();
+	if(!read_headers(host, port, protocol, serving, outgoing_request)){
 		return;
 	}
 

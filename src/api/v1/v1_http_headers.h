@@ -1,16 +1,15 @@
 #pragma once
 #include <string>
 #include <boost/beast.hpp>
+#include "../../Serving.h"
 
 // read x-bare headers and put result into output
 // true if okay, false if error
 bool read_headers(
-	unsigned int& error_status,
-	std::string& error,
 	std::string& host,
 	std::string& port,
 	std::string& protocol,
-	const boost::beast::http::request<boost::beast::http::buffer_body>& server_request,
+	std::shared_ptr<Serving> serving,
 	boost::beast::http::request<boost::beast::http::buffer_body>& request
 );
 

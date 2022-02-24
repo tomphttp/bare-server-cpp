@@ -35,8 +35,5 @@ void instance_information(std::shared_ptr<Serving> serving) {
 
 	std::string body = buffer.GetString();
 
-	serving->response.set("content-type", "application/json");
-	boost::beast::ostream(serving->response.body()) << body;
-	serving->response.content_length(serving->response.body().size());
-	serving->write();
+	serving->json(200, { buffer.GetString(), buffer.GetSize() });
 }

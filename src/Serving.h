@@ -11,6 +11,7 @@ public:
 	Serving(boost::asio::ip::tcp::socket socket, std::shared_ptr<Server> server);
 	void process();
 	void write();
+	void json(unsigned int status, std::string serialized);
 private:
 	void respond();
 };

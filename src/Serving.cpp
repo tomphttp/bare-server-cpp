@@ -44,12 +44,16 @@ void Serving::respond(){
 
 	std::string target = request_parser.get().target().to_string();
 	
+	size_t directory_index = target.find(server->directory);
+
+	target = "/" + std::string(target.begin() + directory_index + server->directory.length(), target.end());
+
+	std::cout << target << std::endl;
+
 	bool route_exists = routes.contains(target);
 
 	if(!route_exists){
-		response.result(http::status::not_found);
-		response.set(http::field::content_type, "text/plain");
-		write();
+		json(404, R"({"message":"Not found."})");
 		return;
 	}
 
@@ -58,4 +62,13 @@ void Serving::respond(){
 	assert(route != NULL);
 	
 	route(shared_from_this());
+}
+
+
+void Serving::json(unsigned int status, std::string serialized){
+	beast::ostream(response.body()) << serialized;
+	response.set(http::field::content_type, "application/json");
+	response.content_length(response.body().size());
+	response.result(status);
+	write();
 }

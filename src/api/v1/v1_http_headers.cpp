@@ -22,18 +22,16 @@ std::string serialize_string(std::string unserialized){
 }
 
 bool read_headers(
-	unsigned int& error_status,
-	std::string& error,
 	std::string& host,
 	std::string& port,
 	std::string& protocol,
-	const http::request<http::buffer_body>& server_request,
+	std::shared_ptr<Serving> serving,
 	http::request<http::buffer_body>& request
 ){
 	bool bare_headers = false;
 	bool bare_method = false;
 
-	for(auto it = server_request.begin(); it != server_request.end(); ++it){
+	for(auto it = serving->request_parser.get().begin(); it != serving->request_parser.get().end(); ++it){
 		std::string name = it->name_string().to_string();
 		std::string value = it->value().to_string();
 		std::string lowercase = name;
@@ -50,14 +48,12 @@ bool read_headers(
 			rapidjson::Document document;
 
 			if(rapidjson::ParseResult result = document.Parse(value.c_str(), value.length())){
-				error = R"({"error":{"code":"INVALID_BARE_HEADER","id":"request.headers.x-bare-headers","message":)" + serialize_string(std::string("Header contained invalid JSON. (") + GetParseError_En(result.Code()) + ")") + R"(}})";
-				error_status = 400;
+				serving->json(400, R"({"error":{"code":"INVALID_BARE_HEADER","id":"request.headers.x-bare-headers","message":)" + serialize_string(std::string("Header contained invalid JSON. (") + GetParseError_En(result.Code()) + ")") + R"(}})");
 				return false;
 			}
 
 			if(!document.IsObject()){
-				error = R"({"error":{"code":"INVALID_BARE_HEADER","id":"request.headers.x-bare-headers","message":"Headers object was not an object."}})";
-				error_status = 400;
+				serving->json(400, R"({"error":{"code":"INVALID_BARE_HEADER","id":"request.headers.x-bare-headers","message":"Headers object was not an object."}})");
 				return false;
 			}
 
@@ -74,14 +70,12 @@ bool read_headers(
 						if(value.IsString()){
 							request.set(name, std::string(value.GetString(), value.GetStringLength()));
 						}else{
-							error = R"({"error":{"code":"INVALID_BARE_HEADER","id":)" + serialize_string("bare.headers." + name) + R"(,"message":"Header was not a String or Array."}})";
-							error_status = 400;
+							serving->json(400, R"({"error":{"code":"INVALID_BARE_HEADER","id":)" + serialize_string("bare.headers." + name) + R"(,"message":"Header was not a String or Array."}})");
 							return false;
 						}
 					}
 				}else{
-					error = R"({"error":{"code":"INVALID_BARE_HEADER","id":)" + serialize_string("bare.headers." + name) + R"(,"message":"Header was not a String or Array."}})";
-					error_status = 400;
+					serving->json(400, R"({"error":{"code":"INVALID_BARE_HEADER","id":)" + serialize_string("bare.headers." + name) + R"(,"message":"Header was not a String or Array."}})");
 					return false;
 				}
 			}
@@ -89,14 +83,12 @@ bool read_headers(
 	}
 
 	if(!bare_method){
-		error = R"({"error":{"code":"MISSING_BARE_HEADER","id":"request.headers.x-bare-method","message":"Header was not specified."}})";
-		error_status = 400;
+		serving->json(400, R"({"error":{"code":"MISSING_BARE_HEADER","id":"request.headers.x-bare-method","message":"Header was not specified."}})");
 		return false;
 	}
 	
 	if(!bare_headers){
-		error = R"({"error":{"code":"MISSING_BARE_HEADER","id":"request.headers.x-bare-headers","message":"Header was not specified."}})";
-		error_status = 400;
+		serving->json(400, R"({"error":{"code":"MISSING_BARE_HEADER","id":"request.headers.x-bare-headers","message":"Header was not specified."}})");
 		return false;
 	}
 	
@@ -155,7 +147,6 @@ void write_headers(
 	std::string bare_headers(buffer.GetString(), buffer.GetSize());
 
 	response.set("X-Bare-Headers", bare_headers);
-	
 	response.set("X-Bare-Status", std::to_string(remote.result_int()));
 	response.set("X-Bare-Status-Text", remote.reason());
 }
