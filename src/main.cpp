@@ -14,11 +14,21 @@ int main(int argc, char* argv[]) {
 	std::string directory;
 	size_t threads = 0;
 
+	const char* port_env = getenv("PORT");
+
+	std::string default_port;
+
+	if(port_env == NULL){
+		default_port = "80";
+	}else{
+		default_port = port_env;
+	}
+
 	desc.add_options ()
 		("help", "Print help")
 		("directory,d", po::value(&directory)->value_name("<string>")->default_value("/"), "Bare directory")
 		("host,h", po::value(&host)->value_name("<string>")->default_value("localhost"), "Listening host")
-		("port,p", po::value(&port)->value_name("<number>")->default_value("80"), "Listening port")
+		("port,p", po::value(&port)->value_name("<number>")->default_value(default_port), "Listening port")
 		("errors,e", "Error logging")
 		("threads,t", po::value(&threads)->value_name("<number>")->default_value(4), "Amount of IO threads")
 	;
