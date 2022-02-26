@@ -235,7 +235,7 @@ class SessionHTTPS : public BaseSession<beast::ssl_stream<beast::tcp_stream>> {
    public:
 	beast::ssl_stream<beast::tcp_stream> stream_;
 	void _connect(tcp::resolver::results_type results, std::function<void()> callback) {
-		auto self = std::shared_ptr<SessionHTTPS>(this);
+		auto self = shared_from_this();
 
 		std::string host = results->host_name();
 
@@ -255,7 +255,7 @@ class SessionHTTPS : public BaseSession<beast::ssl_stream<beast::tcp_stream>> {
 				return self->fail(ec, "connect");
 			}
 
-			self->stream_.async_handshake(ssl::stream_base::client, [self, callback](const boost::system::error_code& ec) {
+			reinterpret_cast<SessionHTTPS*>(self.get())->stream_.async_handshake(ssl::stream_base::client, [self, callback](const boost::system::error_code& ec) {
 				if (ec) {
 					return self->fail(ec, "SSL handshake");
 				}

@@ -1,3 +1,4 @@
+#include <iostream>
 #include "./v1_http_headers.h"
 #include <rapidjson/document.h>
 #include <rapidjson/error/en.h>
@@ -59,12 +60,10 @@ bool read_headers(
 	}
 
 	if ((!bare_headers.length() || !bare_forward_headers.length() || !bare_protocol || !bare_path || !bare_port || !bare_host) && serving->request_parser.get().method_string() == "OPTIONS") {
-		boost::beast::http::response<boost::beast::http::empty_body> response(serving->response_base());
+		auto response = std::make_shared<boost::beast::http::response<boost::beast::http::empty_body>>(serving->response_base());
 
-		// std::shared_ptr<Serving> serving = shared_from_this();
-
-		http::async_write(serving->socket, response, [serving, response](beast::error_code ec, std::size_t) {
-			serving->on_sent(response.keep_alive());
+		http::async_write(serving->socket, *response.get(), [serving, response](beast::error_code ec, std::size_t) {
+			serving->on_sent(response->keep_alive());
 		});
 
 		return false;
