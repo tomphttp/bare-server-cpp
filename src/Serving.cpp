@@ -45,6 +45,8 @@ void Serving::respond() {
 		response.keep_alive(true);
 		response.set(http::field::connection, "keep-alive");
 		response.set(http::field::keep_alive, "timeout=5");
+	} else {
+		response.set(http::field::connection, "close");
 	}
 
 	response.set("Access-Control-Allow-Headers", "*");
