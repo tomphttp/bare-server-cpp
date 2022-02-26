@@ -26,13 +26,12 @@ void Serving::process() {  // headers and body
 		
 		if (!ec) {
 			self->respond();
-		}else{
-			std::cerr << "error code " << ec.category().message(1) << ", " << ec.value() << std::endl;
+		} else {
+			std::cerr << "Error reading request headers: " << ec.category().message(1) << ", " << ec.value() << std::endl;
 		} });
 }
 
-const boost::beast::http::response<boost::beast::http::empty_body>&
-Serving::response_base() {
+const boost::beast::http::response<boost::beast::http::empty_body>& Serving::response_base() {
 	return response;
 }
 

@@ -112,13 +112,13 @@ class BaseSession : public std::enable_shared_from_this<BaseSession<Stream>> {
 			return fail(ec, "On remote headers");
 		}
 
-		response.chunked(remote_parser.chunked());
-
-		if (remote_parser.get().has_content_length()) {
-			response.content_length(remote_parser.content_length());
+		if (remote_parser.chunked()) {
+			response.chunked(true);
+		} else {
+			if (remote_parser.get().has_content_length()) {
+				response.content_length(remote_parser.content_length());
+			}
 		}
-
-		response.keep_alive(serving->request_parser.get().keep_alive());
 
 		write_headers(remote_parser.get(), response);
 
