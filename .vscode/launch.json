@@ -9,7 +9,7 @@
 			"type": "cppdbg",
 			"request": "launch",
 			"program": "${workspaceFolder}/build/BareServer",
-			"args": [ "--port", "8001", "--directory", "/bare/" ],
+			"args": [ "--port", "8001", "--directory", "/bare/", "--errors" ],
 			"stopAtEntry": false,
 			"cwd": "${fileDirname}",
 			"environment": [],
