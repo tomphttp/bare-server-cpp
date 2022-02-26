@@ -11,3 +11,6 @@ ColumnLimit: 0
 TabWidth: 4
 IndentCaseLabels: true
 IndentWidth: 4
+BreakConstructorInitializers: BeforeComma
+BreakBeforeTernaryOperators: true
+PackConstructorInitializers: Never

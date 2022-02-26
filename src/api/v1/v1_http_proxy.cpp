@@ -26,7 +26,14 @@ class BaseSession : public std::enable_shared_from_this<BaseSession<Stream>> {
 	char read_buffer[8000];
 	virtual void _connect(tcp::resolver::results_type results, std::function<void()> callback) = 0;
 	BaseSession(std::shared_ptr<Serving> serving_, const http::request<http::buffer_body>& outgoing_request_, Stream& stream_)
-	    : serving(serving_), resolver(net::make_strand(serving->server->iop)), stream(stream_), outgoing_request(outgoing_request_), request_serializer(outgoing_request), request_parser(serving->request_parser), response(serving->response_base()), response_serializer(response) {}
+	    : serving(serving_)
+	    , resolver(net::make_strand(serving->server->iop))
+	    , stream(stream_)
+	    , outgoing_request(outgoing_request_)
+	    , request_serializer(outgoing_request)
+	    , request_parser(serving->request_parser)
+	    , response(serving->response_base())
+	    , response_serializer(response) {}
 	void process(std::string host, std::string port) {
 		resolver.async_resolve(host, port, beast::bind_front_handler(&BaseSession::on_resolve, this->shared_from_this()));
 	}
@@ -220,7 +227,8 @@ class SessionHTTP : public BaseSession<beast::tcp_stream> {
 		});
 	}
 	SessionHTTP(std::shared_ptr<Serving> serving_, const http::request<http::buffer_body>& outgoing_request_)
-	    : stream_(serving_->server->iop), BaseSession(serving_, outgoing_request_, stream_) {}
+	    : stream_(serving_->server->iop)
+	    , BaseSession(serving_, outgoing_request_, stream_) {}
 };
 
 class SessionHTTPS : public BaseSession<beast::ssl_stream<beast::tcp_stream>> {
@@ -257,7 +265,8 @@ class SessionHTTPS : public BaseSession<beast::ssl_stream<beast::tcp_stream>> {
 		});
 	}
 	SessionHTTPS(std::shared_ptr<Serving> serving_, const http::request<http::buffer_body>& outgoing_request_)
-	    : stream_(serving_->server->iop, serving->server->ssl_ctx), BaseSession(serving_, outgoing_request_, stream_) {}
+	    : stream_(serving_->server->iop, serving->server->ssl_ctx)
+	    , BaseSession(serving_, outgoing_request_, stream_) {}
 };
 
 void v1_http_proxy(std::shared_ptr<Serving> serving) {

@@ -72,5 +72,6 @@
 		"shared_mutex": "cpp",
 		"cassert": "cpp"
 	},
-	"C_Cpp.default.cppStandard": "c++20"
+	"C_Cpp.default.cppStandard": "c++20",
+	"clang-format.executable": "clang-format-14"
 }

@@ -13,7 +13,9 @@ namespace ssl = net::ssl;
 using tcp = boost::asio::ip::tcp;
 
 Serving::Serving(tcp::socket socket_, std::shared_ptr<Server> server_)
-    : socket(std::move(socket_)), server(server_), buffer(8192) {
+    : socket(std::move(socket_))
+    , server(server_)
+    , buffer(8192) {
 }
 
 void Serving::process() {  // headers and body
