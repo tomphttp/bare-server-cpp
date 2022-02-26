@@ -83,11 +83,7 @@ void Serving::on_sent(bool keep_alive) {
 	}
 }
 
-void Serving::json
-
-    (unsigned int status,
-
-     std::string serialized) {
+void Serving::json(unsigned int status, std::string serialized) {
 	std::shared_ptr<Serving> self = shared_from_this();
 	auto response = std::make_shared<http::response<http::dynamic_body>>(response_base());
 
