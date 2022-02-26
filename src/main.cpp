@@ -44,9 +44,12 @@ int main(int argc, char* argv[]) {
 		return 1;
 	}
 
+	bool log_errors = vm.count("errors");
+
 	try {
-		std::shared_ptr<Server> server = std::make_shared<Server>(directory, vm.count("errors"), threads);
+		std::shared_ptr<Server> server = std::make_shared<Server>(directory, log_errors, threads);
 		std::cout << "Created Bare Server on directory: " << directory << std::endl;
+		std::cout << "Error logging is " << (log_errors ? "enabled." : "disabled." ) << std::endl;
 		std::cout << "HTTP server listening. View live at http://" << host << ":" << port << directory << std::endl;
 		server->listen(host, port);
 	} catch (std::exception const& e) {
