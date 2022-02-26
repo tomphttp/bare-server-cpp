@@ -1,0 +1,13 @@
+BasedOnStyle: Chromium
+
+RawStringFormats:
+- Language: Cpp
+  Delimiters:
+  - 'cpp'
+  - 'h'
+
+UseTab: ForIndentation
+ColumnLimit: 0
+TabWidth: 4
+IndentCaseLabels: true
+IndentWidth: 4

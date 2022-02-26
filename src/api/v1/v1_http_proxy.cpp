@@ -25,7 +25,6 @@ public:
 	tcp::resolver resolver;
 	char read_buffer[8000];
 	virtual void _connect(tcp::resolver::results_type results, std::function<void()> callback) = 0;
-	virtual void _on_connect(std::function<void()> callback) = 0;
 	BaseSession(std::shared_ptr<Serving> serving_, const http::request<http::buffer_body>& outgoing_request_, Stream& stream_)
 		: serving(serving_)
 		, resolver(net::make_strand(serving->server->iop))
@@ -47,19 +46,10 @@ public:
 
 			return fail(ec, "Resolving host");
 		}
-		// Set a timeout on the operation
-		// stream.expires_after(std::chrono::seconds(30));
-
-		_connect(results, beast::bind_front_handler(&BaseSession::on_connect, this->shared_from_this()));
-	}
-	void on_connect() {
+		
 		auto self = this->shared_from_this();
 
-		_on_connect([self](){
-			// Set a timeout on the operation
-			// self->stream.expires_after(std::chrono::seconds(30));
-
-			// Send the HTTP request to the remote host
+		_connect(results, [self](){
 			http::async_write_header(self->stream, self->request_serializer, beast::bind_front_handler(&BaseSession::on_write_headers, self->shared_from_this()));
 		});
 	}
@@ -229,6 +219,8 @@ public:
 	void _connect(tcp::resolver::results_type results, std::function<void()> callback){
 		auto self = this->shared_from_this();
 
+		stream.expires_after(std::chrono::seconds(30));
+
 		stream.async_connect(results, [self,callback](beast::error_code ec, tcp::resolver::results_type::endpoint_type){
 			if(ec) {
 				return self->fail(ec, "connect");
@@ -236,9 +228,6 @@ public:
 
 			callback();
 		});
-	}
-	void _on_connect(std::function<void()> callback){
-		callback();
 	}
 	SessionHTTP(std::shared_ptr<Serving> serving_, const http::request<http::buffer_body>& outgoing_request_)
 		: stream_(serving_->server->iop)
@@ -250,7 +239,7 @@ class SessionHTTPS : public BaseSession<beast::ssl_stream<beast::tcp_stream>> {
 public:
 	beast::ssl_stream<beast::tcp_stream> stream_;
 	void _connect(tcp::resolver::results_type results, std::function<void()> callback){
-		auto self = this->shared_from_this();
+		auto self = std::shared_ptr<SessionHTTPS>(this);
 
 		std::string host = results->host_name();
 		
@@ -259,23 +248,24 @@ public:
 			return fail(ec, "Setting SSL hostname");
 		}
 		
+		beast::get_lowest_layer(stream_).expires_after(std::chrono::seconds(30));
+
 		beast::get_lowest_layer(stream_).async_connect(results, [self,callback](beast::error_code ec, tcp::resolver::results_type::endpoint_type){
 			if(ec) {
+				if(ec == beast::error::timeout){
+					return void(self->serving->json(500, R"({"code":"CONNECTION_TIMEOUT","id":"request","message":"The specified host didn't connect in time."})"));
+				}
+				
 				return self->fail(ec, "connect");
 			}
 
-			callback();
-		});
-	}
-	void _on_connect(std::function<void()> callback){
-		auto self = this->shared_from_this();
-		
-		stream_.async_handshake(ssl::stream_base::client, [self,callback](const boost::system::error_code& ec){
-			if(ec){
-				return self->fail(ec, "SSL handshake");
-			}
+			self->stream_.async_handshake(ssl::stream_base::client, [self,callback](const boost::system::error_code& ec){
+				if(ec){
+					return self->fail(ec, "SSL handshake");
+				}
 
-			callback();
+				callback();
+			});
 		});
 	}
 	SessionHTTPS(std::shared_ptr<Serving> serving_, const http::request<http::buffer_body>& outgoing_request_)
