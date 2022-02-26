@@ -1,16 +1,16 @@
 #include "./instance_info.h"
-#include "../process_memory.h"
 #include <rapidjson/document.h>
 #include <rapidjson/prettywriter.h>
+#include "../process_memory.h"
 
 // 1024 squared
 constexpr unsigned long long MEGABYTE = 1048576;
 
 void instance_information(std::shared_ptr<Serving> serving) {
 	rapidjson::Document document;
-	
+
 	document.SetObject();
-	
+
 	rapidjson::Document::AllocatorType& allocator = document.GetAllocator();
 
 	rapidjson::Value versions;
@@ -35,5 +35,5 @@ void instance_information(std::shared_ptr<Serving> serving) {
 
 	std::string body = buffer.GetString();
 
-	serving->json(200, { buffer.GetString(), buffer.GetSize() });
+	serving->json(200, {buffer.GetString(), buffer.GetSize()});
 }

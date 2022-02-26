@@ -8,7 +8,7 @@ namespace po = boost::program_options;
 
 int main(int argc, char* argv[]) {
 	po::options_description desc("Allowed options");
-    
+
 	std::string host;
 	std::string port;
 	std::string directory;
@@ -18,12 +18,13 @@ int main(int argc, char* argv[]) {
 
 	std::string default_port;
 
-	if(port_env == NULL){
+	if (port_env == NULL) {
 		default_port = "80";
-	}else{
+	} else {
 		default_port = port_env;
 	}
 
+	// clang-format off
 	desc.add_options ()
 		("help", "Print help")
 		("directory,d", po::value(&directory)->value_name("<string>")->default_value("/"), "Bare directory")
@@ -32,12 +33,13 @@ int main(int argc, char* argv[]) {
 		("errors,e", "Error logging")
 		("threads,t", po::value(&threads)->value_name("<number>")->default_value(4), "Amount of IO threads")
 	;
-    
-    po::variables_map vm;
-    po::store (po::command_line_parser (argc, argv).options (desc).run (), vm);
-    po::notify (vm);
-    
-	if(vm.count ("help")){
+	// clang-format on
+
+	po::variables_map vm;
+	po::store(po::command_line_parser(argc, argv).options(desc).run(), vm);
+	po::notify(vm);
+
+	if (vm.count("help")) {
 		std::cerr << desc << "\n";
 		return 1;
 	}
@@ -47,8 +49,7 @@ int main(int argc, char* argv[]) {
 		std::cout << "Created Bare Server on directory: " << directory << std::endl;
 		std::cout << "HTTP server listening. View live at http://" << host << ":" << port << directory << std::endl;
 		server->listen(host, port);
-	}
-	catch(std::exception const& e) {
+	} catch (std::exception const& e) {
 		std::cerr << "Error: " << e.what() << std::endl;
 		return EXIT_FAILURE;
 	}

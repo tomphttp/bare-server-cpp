@@ -1,13 +1,13 @@
 #pragma once
 #include <boost/asio.hpp>
+#include <boost/asio/strand.hpp>
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
-#include <boost/beast/version.hpp>
-#include <boost/asio/strand.hpp>
 #include <boost/beast/ssl.hpp>
+#include <boost/beast/version.hpp>
 
 class Server : public std::enable_shared_from_this<Server> {
-public:
+   public:
 	bool log_errors;
 	std::string directory;
 	boost::asio::thread_pool iop;
