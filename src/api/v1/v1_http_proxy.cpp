@@ -33,8 +33,8 @@ public:
 		, outgoing_request(outgoing_request_)
 		, request_serializer(outgoing_request)
 		, request_parser(serving->request_parser)
+		, response(serving->response_base())
 		, response_serializer(response)
-		, response(serving->response)
 	{}
 	void process(std::string host, std::string port){
 		resolver.async_resolve(host, port, beast::bind_front_handler(&BaseSession::on_resolve, this->shared_from_this()));
@@ -124,17 +124,13 @@ public:
 			return fail(ec, "On remote headers");
 		}
 		
-		response.result(http::status::ok);
-		response.version(11);
-		response.keep_alive(remote_parser.get().keep_alive());
-
 		response.chunked(remote_parser.chunked());
 
 		if(remote_parser.get().has_content_length()){
 			response.content_length(remote_parser.content_length());
 		}
 	
-		response.keep_alive(true);
+		response.keep_alive(serving->request_parser.get().keep_alive());
 
 		write_headers(remote_parser.get(), response);
 
@@ -163,6 +159,12 @@ public:
 			}
 		});
 	}
+	void on_complete_response(){
+		if(!response.keep_alive()){
+			beast::error_code ec;
+			serving->socket.shutdown(tcp::socket::shutdown_send, ec);
+		}
+	}
 	void pipe_remote(){
 		// run loop once, check if serializer and remote are done before further running loop
 		if (!remote_parser.is_done()) {
@@ -190,6 +192,7 @@ public:
 			remote_parser.get().body().data = nullptr;
 			remote_parser.get().body().size = 0;
 			write_remote_response();
+			on_complete_response();
 		}
 	}
 	void on_write_fail(beast::error_code ec, size_t bytes){}
@@ -201,7 +204,7 @@ public:
 		if(serving->server->log_errors){
 			std::cerr << "Failed at " << where << ", " << error_message << ", " << error_category << ", " << error_category_message << std::endl;
 		}
-		
+
 		unsigned int status = 400;
 		std::string json = R"({"code":"UNKNOWN","id":)" + serialize_string(error_category) + R"(,"message":)" + serialize_string(error_message + " (At" + where + ")") + R"(})";
 		
