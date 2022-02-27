@@ -13,7 +13,9 @@ file(GLOB_RECURSE sources ${PROJECT_SOURCE_DIR} ./src/*.cpp)
 include_directories(${Boost_INCLUDE_DIRS} ${OPENSSL_INCLUDE_DIR} ./certify/include/)
 
 if (MSVC)
-  add_definitions(/bigobj)
+	# build for win7
+	set(_WIN32_WINNT 0x0601)
+	add_definitions(/bigobj)
 endif ()
 
 add_executable(BareServer ${sources})
