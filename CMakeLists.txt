@@ -12,14 +12,20 @@ file(GLOB_RECURSE sources ${PROJECT_SOURCE_DIR} ./src/*.cpp)
 
 include_directories(${Boost_INCLUDE_DIRS} ${OPENSSL_INCLUDE_DIR} ./certify/include/)
 
-if (MSVC)
+if(WIN32)
 	# build for win7
 	set(_WIN32_WINNT 0x0601)
+endif()
+
+if(MSVC)
 	add_definitions(/bigobj)
-endif ()
+endif()
 
 add_executable(BareServer ${sources})
 
+if(WIN32)
+	target_link_libraries(BareServer Crypt32.lib)
+endif()
 
 find_package(Threads REQUIRED)
 target_link_libraries(BareServer ${CMAKE_THREAD_LIBS_INIT})
