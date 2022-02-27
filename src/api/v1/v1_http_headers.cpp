@@ -62,7 +62,7 @@ bool read_headers(
 	if ((!bare_headers.length() || !bare_forward_headers.length() || !bare_protocol || !bare_path || !bare_port || !bare_host) && serving->request_parser.get().method_string() == "OPTIONS") {
 		auto response = std::make_shared<boost::beast::http::response<boost::beast::http::empty_body>>(serving->response_base());
 
-		response->result_int(204);
+		response->result(204);
 
 		http::async_write(serving->socket, *response.get(), [serving, response](beast::error_code ec, std::size_t) {
 			serving->on_sent(response->keep_alive());

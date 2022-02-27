@@ -1,8 +1,10 @@
 #include "./process_memory.h"
 
 #ifdef WIN32
-#include <psapi.h>
+// clang-format off
 #include <windows.h>
+#include <psapi.h>
+// clang-format on
 
 void process_memory_usage(double& vm_usage) {
 	vm_usage = 0.0;
