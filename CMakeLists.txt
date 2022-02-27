@@ -10,18 +10,20 @@ configure_file(./src/config.h.in ./src/config.h)
 
 file(GLOB_RECURSE sources ${PROJECT_SOURCE_DIR} ./src/*.cpp)
 
-find_package(Threads REQUIRED)
-find_package(OpenSSL REQUIRED)
-find_package(Boost COMPONENTS program_options REQUIRED)
-
-find_library(LIBSTATGRAB NAMES statgrab PATHS)
-
 include_directories(${Boost_INCLUDE_DIRS} ${OPENSSL_INCLUDE_DIR} ./certify/include/)
 
-# add the executable
+if (MSVC)
+  add_definitions(/bigobj)
+endif ()
+
 add_executable(BareServer ${sources})
 
+
+find_package(Threads REQUIRED)
 target_link_libraries(BareServer ${CMAKE_THREAD_LIBS_INIT})
+
+find_package(OpenSSL REQUIRED)
+target_link_libraries(BareServer OpenSSL::SSL OpenSSL::Crypto) 
+
+find_package(Boost COMPONENTS program_options REQUIRED)
 target_link_libraries(BareServer ${Boost_LIBRARIES})
-target_link_libraries(BareServer ssl)
-target_link_libraries(BareServer crypto)
