@@ -13,4 +13,3 @@ IndentCaseLabels: true
 IndentWidth: 4
 BreakConstructorInitializers: BeforeComma
 BreakBeforeTernaryOperators: true
-PackConstructorInitializers: Never
