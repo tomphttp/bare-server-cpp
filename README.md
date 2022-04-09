@@ -1,5 +1,7 @@
 # bare-server-cpp
 
+This project has been archived due to a lack of updates and poor performance compared to [Bare Server Node](https://github.com/tomphttp/bare-server-node). This may change in the future. However, in this project's current state, it is unlikely.
+
 ## Dependencies
 
 - OpenSSL
